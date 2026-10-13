@@ -2899,7 +2899,7 @@ body, html, #root {
 }
 
 .student-nav-name {
-  max-width: 90px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

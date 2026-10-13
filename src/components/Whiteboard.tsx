@@ -16,6 +16,7 @@ export interface WhiteboardRef {
   insertTemplate: (templateTitle: string, sections: TemplateSection[]) => void;
   downloadSnapshot: (filename?: string) => Promise<boolean>;
   clear: () => void;
+  applyAction: (tool: string, payload: any) => void;
 }
 
 export interface WhiteboardProps {
@@ -25,6 +26,57 @@ export interface WhiteboardProps {
 
 export const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ socket, onActionReceived }, ref) => {
   const editorRef = useRef<Editor | null>(null);
+  const applyActionRef = useRef<(tool: string, payload: any) => void>(() => {});
+  applyActionRef.current = (tool: string, payload: any) => {
+    const editor = editorRef.current;
+    if (!editor || !payload && tool !== "clearBoard") return;
+    payload = payload || {};
+    if (tool === "drawBoardText") {
+      editor.createShape({
+        id: createShapeId(),
+        type: "text",
+        x: payload.x || 120,
+        y: payload.y || 120,
+        props: {
+          text: payload.content,
+          size: payload.fontSize || "m",
+          color: payload.color || "black",
+        },
+      });
+    } else if (tool === "highlightError") {
+      const cardId = createShapeId();
+      const textId = createShapeId();
+
+      editor.createShape({
+        id: cardId,
+        type: "geo",
+        x: 80,
+        y: 80,
+        props: {
+          geo: "rectangle",
+          w: 440,
+          h: 140,
+          color: "red",
+          fill: "semi",
+        },
+      });
+
+      editor.createShape({
+        id: textId,
+        type: "text",
+        x: 95,
+        y: 95,
+        props: {
+          text: `❌ ${payload.incorrectSnippet}\n✅ ${payload.correctedSnippet}\n💡 ${payload.explanation || ""}`,
+          size: "s",
+          color: "black",
+        },
+      });
+    } else if (tool === "clearBoard") {
+      editor.selectAll();
+      editor.deleteShapes(editor.getSelectedShapeIds());
+    }
+  };
 
   useImperativeHandle(ref, () => ({
     getEditor: () => editorRef.current,
@@ -177,6 +229,10 @@ export const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ socket, 
         return false;
       }
     },
+    applyAction: (tool: string, payload: any) => {
+      onActionReceived?.(tool, payload);
+      applyActionRef.current(tool, payload);
+    },
     clear: () => {
       const editor = editorRef.current;
       if (!editor) return;
@@ -200,51 +256,7 @@ export const Whiteboard = forwardRef<WhiteboardRef, WhiteboardProps>(({ socket, 
           onActionReceived(tool, payload);
         }
 
-        if (tool === "drawBoardText") {
-          editor.createShape({
-            id: createShapeId(),
-            type: "text",
-            x: payload.x || 120,
-            y: payload.y || 120,
-            props: {
-              text: payload.content,
-              size: payload.fontSize || "m",
-              color: payload.color || "black",
-            },
-          });
-        } else if (tool === "highlightError") {
-          const cardId = createShapeId();
-          const textId = createShapeId();
-
-          editor.createShape({
-            id: cardId,
-            type: "geo",
-            x: 80,
-            y: 80,
-            props: {
-              geo: "rectangle",
-              w: 440,
-              h: 140,
-              color: "red",
-              fill: "semi",
-            },
-          });
-
-          editor.createShape({
-            id: textId,
-            type: "text",
-            x: 95,
-            y: 95,
-            props: {
-              text: `❌ ${payload.incorrectSnippet}\n✅ ${payload.correctedSnippet}\n💡 ${payload.explanation || ""}`,
-              size: "s",
-              color: "black",
-            },
-          });
-        } else if (tool === "clearBoard") {
-          editor.selectAll();
-          editor.deleteShapes(editor.getSelectedShapeIds());
-        }
+        applyActionRef.current(tool, payload);
       } catch (err) {
         console.error("Failed to parse whiteboard message:", err);
       }

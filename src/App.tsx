@@ -117,15 +117,15 @@ export const App: React.FC = () => {
   // Track 2: Gamification
   const [xp, setXp] = useState<number>(() => {
     const saved = localStorage.getItem("ai_tutor_xp");
-    return saved ? parseInt(saved, 10) : 220;
+    return saved ? parseInt(saved, 10) : 0;
   });
   const [streak, setStreak] = useState<number>(() => {
     const saved = localStorage.getItem("ai_tutor_streak");
-    return saved ? parseInt(saved, 10) : 4;
+    return saved ? parseInt(saved, 10) : 0;
   });
   const [unlockedBadges, setUnlockedBadges] = useState<string[]>(() => {
     const saved = localStorage.getItem("ai_tutor_badges");
-    return saved ? JSON.parse(saved) : ["first_step"];
+    return saved ? JSON.parse(saved) : [];
   });
   const [visitedTutors, setVisitedTutors] = useState<string[]>(["foundation"]);
 
@@ -311,135 +311,27 @@ export const App: React.FC = () => {
     }, 4500);
   }, []);
 
-  // WebSocket connection & lifecycle
+  // Vercel-compatible: no WebSocket server. Check the serverless API health instead.
   useEffect(() => {
-    let isMounted = true;
+    let alive = true;
+    fetch("/api/health").then((r) => r.json()).then((d) => {
+      if (alive) setIsConnected(Boolean(d?.ok && d?.gemini));
+    }).catch(() => alive && setIsConnected(false));
+    return () => { alive = false; };
+  }, []);
 
-    const connect = () => {
-      if (!isMounted) return;
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      const ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
-      setSocket(ws);
+  // Close quiz modal with Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowQuizModal(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-      ws.onopen = () => {
-        if (!isMounted) return;
-        setIsConnected(true);
-        ws.send(JSON.stringify({ type: "START_SESSION", agentId: selectedAgent }));
-      };
-
-      ws.onclose = () => {
-        if (!isMounted) return;
-        setIsConnected(false);
-        setSocket(null);
-        reconnectTimeoutRef.current = window.setTimeout(connect, 3000);
-      };
-
-      ws.onerror = (err) => {
-        console.warn("WebSocket status:", err);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === "AGENT_RESPONSE") {
-            setIsTyping(false);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Math.random().toString(36).substring(2, 9),
-                sender: "agent",
-                text: data.text,
-                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                agentName: currentAgent.nameEn
-              }
-            ]);
-
-            const agentIdToUse = data.agentId || selectedAgent;
-
-            if (data.audioBase64 && data.text) {
-              cacheAgentAudio(agentIdToUse, data.text, data.audioBase64);
-            }
-
-            if (voiceAutoSpeak && data.text) {
-              if (data.audioBase64) {
-                // Direct neural audio playback for the character
-                setPlayingVoiceAgentId(agentIdToUse);
-                setIsTutorSpeaking(true);
-                playBase64Audio({
-                  audioBase64: data.audioBase64,
-                  onStart: () => {
-                    setIsTutorSpeaking(true);
-                    setPlayingVoiceAgentId(agentIdToUse);
-                  },
-                  onEnd: () => {
-                    setIsTutorSpeaking(false);
-                    setPlayingVoiceAgentId(null);
-                  },
-                  onError: () => {
-                    // Direct character voice fallback if audio element fails
-                    handleSpeak(data.text, agentIdToUse);
-                  }
-                });
-              } else {
-                // Direct character voice playback without tone beeps or pitch alteration
-                handleSpeak(data.text, agentIdToUse);
-              }
-            }
-
-            awardXp(15, "محادثة مثمرة مع المعلم", "Fruitful chat with tutor");
-            showTeacherPointer(isArabic ? `شرح ${currentAgent.nameAr} جاهز!` : `${currentAgent.nameEn}'s explanation is ready!`);
-          } else if (data.type === "AGENT_AUDIO") {
-            // Direct audio safety handler
-            if (voiceAutoSpeak && data.audioBase64) {
-              const agentIdToUse = data.agentId || selectedAgent;
-              if (data.text) cacheAgentAudio(agentIdToUse, data.text, data.audioBase64);
-              setPlayingVoiceAgentId(agentIdToUse);
-              setIsTutorSpeaking(true);
-              playBase64Audio({
-                audioBase64: data.audioBase64,
-                onStart: () => {
-                  setIsTutorSpeaking(true);
-                  setPlayingVoiceAgentId(agentIdToUse);
-                },
-                onEnd: () => {
-                  setIsTutorSpeaking(false);
-                  setPlayingVoiceAgentId(null);
-                },
-                onError: () => {
-                  setIsTutorSpeaking(false);
-                  setPlayingVoiceAgentId(null);
-                }
-              });
-            }
-          } else if (data.type === "ERROR") {
-            setIsTyping(false);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Math.random().toString(36).substring(2, 9),
-                sender: "agent",
-                text: `⚠️ ${data.error}`,
-                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                agentName: currentAgent.nameEn
-              }
-            ]);
-          }
-        } catch (err) {
-          console.error("Message parse error:", err);
-        }
-      };
-    };
-
-    connect();
-
-    return () => {
-      isMounted = false;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      socketRef.current?.close();
-    };
-  }, [selectedAgent, voiceAutoSpeak, handleSpeak, awardXp, showTeacherPointer, isArabic, currentAgent.nameAr, currentAgent.nameEn]);
+  // html lang/dir follow the UI language
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  }, [lang]);
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -510,9 +402,6 @@ export const App: React.FC = () => {
       }
     }
 
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: "START_SESSION", agentId }));
-    }
 
     if (voiceAutoSpeak) {
       const greeting = isArabic ? agent.quoteAr : agent.quoteEn;
@@ -590,43 +479,53 @@ export const App: React.FC = () => {
       );
     }
 
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: "USER_MESSAGE", text: textToSend, imageBase64 }));
-    } else {
-      try {
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId: selectedAgent, text: textToSend, imageBase64 })
-        });
-        const data = await res.json();
-        setIsTyping(false);
-        if (data.text) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Math.random().toString(36).substring(2, 9),
-              sender: "agent",
-              text: data.text,
-              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              agentName: currentAgent.nameEn
-            }
-          ]);
-          if (voiceAutoSpeak) handleSpeak(data.text);
-          awardXp(15, "محادثة مثمرة", "Good chat response");
-        }
-      } catch (err: any) {
-        setIsTyping(false);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Math.random().toString(36).substring(2, 9),
-            sender: "agent",
-            text: `⚠️ Error: ${err.message}`,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-          }
-        ]);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: selectedAgent, text: textToSend, imageBase64 })
+      });
+      const ct = res.headers.get("content-type") || "";
+      const data: any = ct.includes("application/json") ? await res.json() : { error: `HTTP ${res.status}` };
+      setIsTyping(false);
+      if (!res.ok || !data.text) {
+        const msg = data.error === "GEMINI_API_KEY_MISSING"
+          ? (isArabic ? "⚠️ المعلم غير مفعّل: مفتاح Gemini غير مضاف في الخادم." : "⚠️ Tutor offline: Gemini API key is not configured on the server.")
+          : (isArabic ? "⚠️ تعذر الوصول للمعلم، حاول مرة ثانية." : "⚠️ Couldn't reach the tutor, please try again.");
+        setMessages((prev) => [...prev, {
+          id: Math.random().toString(36).substring(2, 9), sender: "agent", text: msg,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        }]);
+        return;
       }
+      setIsConnected(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          sender: "agent",
+          text: data.text,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          agentName: currentAgent.nameEn
+        }
+      ]);
+      if (Array.isArray(data.whiteboardActions)) {
+        for (const act of data.whiteboardActions) whiteboardRef.current?.applyAction?.(act.tool, act.payload);
+      }
+      if (voiceAutoSpeak) handleSpeak(data.text, data.agentId || selectedAgent);
+      awardXp(15, "محادثة مثمرة مع المعلم", "Fruitful chat with tutor");
+      showTeacherPointer(isArabic ? `شرح ${currentAgent.nameAr} جاهز!` : `${currentAgent.nameEn}'s explanation is ready!`);
+    } catch (err: any) {
+      setIsTyping(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          sender: "agent",
+          text: isArabic ? "⚠️ تعذر الوصول للمعلم، تأكد من الإنترنت." : "⚠️ Couldn't reach the tutor, check your connection.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        }
+      ]);
     }
   };
 
@@ -1542,8 +1441,8 @@ export const App: React.FC = () => {
             <span>{isConnected ? "🟢" : "🔴"}</span>
             <span>
               {isConnected
-                ? isArabic ? "متصل" : "Connected"
-                : isArabic ? "جاري الاتصال..." : "Connecting..."}
+                ? isArabic ? "المعلم جاهز (صوت بالدور)" : "Tutor ready (turn-based voice)"
+                : isArabic ? "المعلم غير متاح" : "Tutor offline"}
             </span>
           </div>
 
