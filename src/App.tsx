@@ -29,157 +29,24 @@ import {
   stopCurrentSpeech,
   cacheAgentAudio
 } from "./data/voices";
+import { TutorShowcase } from "./components/TutorShowcase";
+import { AGENTS, Agent } from "./config/tutorAgents";
 import "./App.css";
 
-interface Agent {
-  id: string;
-  nameEn: string;
-  nameAr: string;
-  roleEn: string;
-  roleAr: string;
-  avatar: string;
-  quoteEn: string;
-  quoteAr: string;
-  colorClass: string;
-  badgeColor: string;
-  sampleChallenge: string;
-  gender: "male" | "female";
-  geminiVoice: "Puck" | "Fenrir" | "Charon" | "Aoede" | "Kore" | "Leda";
-  genderLabelAr: string;
-  genderLabelEn: string;
-  personaAr: string;
-  personaEn: string;
-  voicePitch: number;
-  voiceRate: number;
+export interface StudentProfile {
+  name: string;
+  level: "beginner" | "intermediate" | "advanced";
+  goal: string;
+  isRegistered: boolean;
 }
 
-const AGENTS: Agent[] = [
-  {
-    id: "foundation",
-    nameEn: "Adam",
-    nameAr: "آدم",
-    roleEn: "Grammar & Basics",
-    roleAr: "القواعد والأساسيات",
-    avatar: "📚",
-    quoteEn: "Let's master sentence structure! 🏗️",
-    quoteAr: "لنبنِ جملاً صحيحة وقوية! 🏗️",
-    colorClass: "card-foundation",
-    badgeColor: "#3b82f6",
-    sampleChallenge: "Fix this sentence: 'She have went to school yesterday.'",
-    gender: "male",
-    geminiVoice: "Puck",
-    genderLabelAr: "صوت رجل هادئ",
-    genderLabelEn: "Male (Calm)",
-    personaAr: "شخصية رجل: هادئ، واثق، وصبور لتبسيط القواعد 👨‍🏫",
-    personaEn: "Male Persona: Calm, steady & patient grammar coach 👨‍🏫",
-    voicePitch: 0.94,
-    voiceRate: 0.90
-  },
-  {
-    id: "free_talk",
-    nameEn: "Sarah",
-    nameAr: "سارة",
-    roleEn: "Casual & Idioms",
-    roleAr: "المحادثة والطلاقة",
-    avatar: "💬",
-    quoteEn: "Chat naturally like a native speaker! ☕",
-    quoteAr: "تحدث بعفوية وأسلوب شيق! ☕",
-    colorClass: "card-free_talk",
-    badgeColor: "#f59e0b",
-    sampleChallenge: "Idiom challenge: What does 'Once in a blue moon' mean?",
-    gender: "female",
-    geminiVoice: "Aoede",
-    genderLabelAr: "صوت نسائي حيوي",
-    genderLabelEn: "Female (Lively)",
-    personaAr: "شخصية نسائية: دافئة، عفوية، ومبتهجة للطلاقة 👩‍💼",
-    personaEn: "Female Persona: Energetic, warm & friendly conversationalist 👩‍💼",
-    voicePitch: 1.24,
-    voiceRate: 1.04
-  },
-  {
-    id: "business_pro",
-    nameEn: "David",
-    nameAr: "ديفيد",
-    roleEn: "Corporate & Interviews",
-    roleAr: "الإنجليزية المهنية والمقابلات",
-    avatar: "💼",
-    quoteEn: "Elevate your executive presence! 📈",
-    quoteAr: "تميّز في اجتماعاتك ومقابلات العمل! 📈",
-    colorClass: "card-business_pro",
-    badgeColor: "#10b981",
-    sampleChallenge: "Email draft: 'Dear Sir, I am writing to follow up regarding our proposal.'",
-    gender: "male",
-    geminiVoice: "Fenrir",
-    genderLabelAr: "صوت رجل تنفيذي",
-    genderLabelEn: "Male (Executive)",
-    personaAr: "شخصية رجل: تنفيذي عميق النبرة، رسمي، ومحترف 💼",
-    personaEn: "Male Persona: Deep executive baritone for business meetings 💼",
-    voicePitch: 0.78,
-    voiceRate: 0.92
-  },
-  {
-    id: "ielts_examiner",
-    nameEn: "Victoria",
-    nameAr: "فيكتوريا",
-    roleEn: "IELTS Examiner",
-    roleAr: "مدربة اختبار الآيلتس",
-    avatar: "🎯",
-    quoteEn: "Reach Band 8.0+ criteria! 🏅",
-    quoteAr: "حقّق أهدافك في الآيلتس بدرجة 8+! 🏅",
-    colorClass: "card-ielts_examiner",
-    badgeColor: "#ec4899",
-    sampleChallenge: "Speaking Part 2: Describe an environmental project in your city.",
-    gender: "female",
-    geminiVoice: "Kore",
-    genderLabelAr: "صوت نسائي بريطاني",
-    genderLabelEn: "Female (British Academic)",
-    personaAr: "شخصية نسائية: بريطانية أكاديمية فخمة وراقية 🎯",
-    personaEn: "Female Persona: Refined British academic IELTS examiner 🎯",
-    voicePitch: 1.08,
-    voiceRate: 0.86
-  },
-  {
-    id: "phonetics",
-    nameEn: "Liam",
-    nameAr: "ليام",
-    roleEn: "Pronunciation & IPA",
-    roleAr: "مخارج الحروف والنطق",
-    avatar: "🎤",
-    quoteEn: "Refine every phoneme and stress! 🎧",
-    quoteAr: "أتقن مخارج الحروف واللكنة بدقة! 🎧",
-    colorClass: "card-phonetics",
-    badgeColor: "#8b5cf6",
-    sampleChallenge: "Pronunciation tip: Contrast 'ship' /ʃɪp/ vs 'sheep' /ʃiːp/.",
-    gender: "male",
-    geminiVoice: "Charon",
-    genderLabelAr: "صوت رجل مخارج الحروف",
-    genderLabelEn: "Male (Phonetician)",
-    personaAr: "شخصية رجل: خبير صوتيات دقيق ومتمهل في النطق 🎧",
-    personaEn: "Male Persona: Articulate phonetician highlighting IPA stress 🎧",
-    voicePitch: 0.88,
-    voiceRate: 0.78
-  },
-  {
-    id: "roleplay",
-    nameEn: "Elena",
-    nameAr: "إيلينا",
-    roleEn: "Real-World Scenarios",
-    roleAr: "سيناريوهات ومواقف واقعية",
-    avatar: "🎭",
-    quoteEn: "Immerse into dynamic roleplays! ✈️",
-    quoteAr: "عِش المواقف اليومية وكأنك هناك! ✈️",
-    colorClass: "card-roleplay",
-    badgeColor: "#f97316",
-    sampleChallenge: "Scenario: You are at an airport transit desk checking your connection.",
-    gender: "female",
-    geminiVoice: "Leda",
-    genderLabelAr: "صوت نسائي مسرحي",
-    genderLabelEn: "Female (Theatrical)",
-    personaAr: "شخصية نسائية: درامية معبّرة لتمثيل سيناريوهات الحياة 🎭",
-    personaEn: "Female Persona: Theatrical, dynamic roleplay actress 🎭",
-    voicePitch: 1.30,
-    voiceRate: 0.98
-  }
+const STUDENT_GOALS = [
+  { id: "grammar", labelAr: "تأسيس وقواعد إنجليزية 📘", labelEn: "Grammar & Foundation 📘", defaultTutor: "foundation" },
+  { id: "conversation", labelAr: "محادثة وطلاقة يومية 🗣️", labelEn: "Casual & Idioms 🗣️", defaultTutor: "free_talk" },
+  { id: "business", labelAr: "إنجليزية الأعمال والمقابلات 💼", labelEn: "Business & Interviews 💼", defaultTutor: "business_pro" },
+  { id: "ielts", labelAr: "التحضير لاختبار الآيلتس 🎯", labelEn: "IELTS Speaking Prep 🎯", defaultTutor: "ielts_examiner" },
+  { id: "phonetics", labelAr: "مخارج الحروف وتصحيح النطق 🎤", labelEn: "Pronunciation & Phonetics 🎤", defaultTutor: "phonetics" },
+  { id: "roleplay", labelAr: "سيناريوهات ومواقف واقعية ✈️", labelEn: "Real-world Scenarios ✈️", defaultTutor: "roleplay" },
 ];
 
 interface ChatMessage {
@@ -201,6 +68,41 @@ interface Particle {
 export const App: React.FC = () => {
   const [lang, setLang] = useState<"ar" | "en">("ar");
   const [selectedAgent, setSelectedAgent] = useState<string>("foundation");
+
+  // Flow Step 1: Student Registration & Tutors Selection vs Flow Step 2: Classroom & Whiteboard
+  const [studentProfile, setStudentProfile] = useState<StudentProfile>(() => {
+    const saved = localStorage.getItem("ai_tutor_student_profile");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.warn("Error parsing saved student profile:", e);
+      }
+    }
+    return {
+      name: "",
+      level: "intermediate",
+      goal: "conversation",
+      isRegistered: false,
+    };
+  });
+
+  const [appStep, setAppStep] = useState<"tutors_selection" | "classroom">(() => {
+    const saved = localStorage.getItem("ai_tutor_student_profile");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.isRegistered && parsed.name?.trim()) {
+          return "classroom";
+        }
+      } catch (e) {
+        console.warn("Error reading student registration:", e);
+      }
+    }
+    return "tutors_selection";
+  });
+
+  const [isChatSidebarCollapsed, setIsChatSidebarCollapsed] = useState<boolean>(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState<string>("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
@@ -621,6 +523,39 @@ export const App: React.FC = () => {
       isArabic
         ? `أهلاً بك مع ${agent.nameAr} (${agent.genderLabelAr})! 🎨`
         : `Welcome to ${agent.nameEn}'s studio (${agent.genderLabelEn})! 🎨`
+    );
+  };
+
+  // Launch classroom & whiteboard after registration and selecting tutor
+  const handleStartClassroomSession = (targetAgentId?: string) => {
+    const finalAgentId = targetAgentId || selectedAgent;
+    const finalName = studentProfile.name.trim() || (isArabic ? "طالب الأكاديمية" : "Academy Student");
+    const updated: StudentProfile = {
+      ...studentProfile,
+      name: finalName,
+      isRegistered: true,
+    };
+    setStudentProfile(updated);
+    localStorage.setItem("ai_tutor_student_profile", JSON.stringify(updated));
+
+    if (finalAgentId !== selectedAgent) {
+      switchAgent(finalAgentId);
+    } else {
+      const agent = AGENTS.find((a) => a.id === finalAgentId) || AGENTS[0];
+      if (voiceAutoSpeak) {
+        const greeting = isArabic
+          ? `مرحباً يا ${finalName}! أنا ${agent.nameAr}، يسعدني بدء الشرح والتفاعل معك على السبورة الذكية!`
+          : `Welcome ${finalName}! I am ${agent.nameEn}, excited to collaborate with you on our interactive whiteboard!`;
+        handleSpeak(greeting, finalAgentId);
+      }
+    }
+
+    setAppStep("classroom");
+    const agentObj = AGENTS.find((a) => a.id === finalAgentId) || AGENTS[0];
+    triggerCelebration(
+      isArabic
+        ? `تم فتح قاعة الدرس والسبورة التفاعلية مع ${agentObj.nameAr}! 🎨`
+        : `Classroom and whiteboard studio opened with ${agentObj.nameEn}! 🎨`
     );
   };
 
@@ -1567,6 +1502,39 @@ export const App: React.FC = () => {
             <span>🗂️</span>
             <span>{isArabic ? "الأرشيف" : "History"}</span>
           </button>
+
+          {/* Dream Tutors Team & Whiteboard Switch */}
+          {appStep === "classroom" ? (
+            <button
+              onClick={() => setAppStep("tutors_selection")}
+              className="tutors-switch-nav-btn"
+              title={isArabic ? "استعراض فريق المعلمين وتغيير المعلم" : "Dream Tutors Showcase"}
+            >
+              <span>👥</span>
+              <span>{isArabic ? "فريق المعلمين" : "Dream Tutors"}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => handleStartClassroomSession()}
+              className="tutors-switch-nav-btn active-classroom-nav"
+              title={isArabic ? "الدخول إلى قاعة السبورة الذكية" : "Go to Whiteboard"}
+            >
+              <span>📋</span>
+              <span>{isArabic ? "السبورة الذكية" : "Whiteboard"}</span>
+            </button>
+          )}
+
+          {/* Student Profile Nav Pill */}
+          {studentProfile.name && (
+            <div
+              className="student-nav-pill"
+              onClick={() => setAppStep("tutors_selection")}
+              title={isArabic ? "اضغط لتعديل الملف أو تغيير المعلم" : "Click to edit student info or switch tutor"}
+            >
+              <span>🎓</span>
+              <span className="student-nav-name">{studentProfile.name}</span>
+            </div>
+          )}
         </div>
 
         <div className="nav-actions-group">
@@ -1589,66 +1557,51 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Workspace Split Layout */}
-      <div className="playful-workspace">
-        {/* Left/Right Sidebar: Tutors & Speech Chat */}
-        <aside className="tutors-chat-sidebar">
-          {/* Character Cards */}
-          <div className="sidebar-tutors-header">
-            <div className="tutors-section-title">
-              <span>{isArabic ? "فريق المعلمين (The Dream Tutors)" : "The Dream Tutors"}</span>
-              <span className="tutors-count-badge">6 Specialists</span>
-            </div>
-
-            <div className="character-cards-grid">
-              {AGENTS.map((agent) => {
-                const isSelected = agent.id === selectedAgent;
-                const isPlayingVoice = playingVoiceAgentId === agent.id;
-                return (
-                  <div
-                    key={agent.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => switchAgent(agent.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        switchAgent(agent.id);
-                      }
-                    }}
-                    className={`character-card ${agent.colorClass} ${isSelected ? "active" : ""} ${isPlayingVoice ? "speaking-card" : ""}`}
-                    title={isArabic ? `${agent.nameAr} - ${agent.roleAr} (${agent.genderLabelAr})` : `${agent.nameEn} - ${agent.roleEn} (${agent.genderLabelEn})`}
+      {/* Separation of Dream Tutors Onboarding vs Interactive Classroom */}
+      {appStep === "tutors_selection" ? (
+        <TutorShowcase
+          isArabic={isArabic}
+          studentProfile={studentProfile}
+          setStudentProfile={setStudentProfile}
+          selectedAgent={selectedAgent}
+          setSelectedAgent={setSelectedAgent}
+          playingVoiceAgentId={playingVoiceAgentId}
+          previewAgentVoice={previewAgentVoice}
+          onConfirmAndStart={handleStartClassroomSession}
+          assignedVoices={assignedVoices}
+        />
+      ) : (
+        <div className="playful-workspace">
+          {/* Left/Right Sidebar: Tutors & Speech Chat */}
+          {!isChatSidebarCollapsed && (
+            <aside className="tutors-chat-sidebar">
+              {/* Classroom Header Bar */}
+              <div className="classroom-sidebar-top-bar">
+                <div className="classroom-sidebar-student-tag">
+                  <span>🎓</span>
+                  <span className="student-tag-name">{studentProfile.name || (isArabic ? "الطالب" : "Student")}</span>
+                  <span className="student-tag-level">
+                    {studentProfile.level === "beginner" ? (isArabic ? "مبتدئ" : "Beginner") : studentProfile.level === "advanced" ? (isArabic ? "متقدم" : "Advanced") : (isArabic ? "متوسط" : "Intermediate")}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    onClick={() => setAppStep("tutors_selection")}
+                    className="classroom-switch-coach-btn"
+                    title={isArabic ? "اختيار معلّم آخر من فريق المعلمين" : "Switch tutor"}
                   >
-                    {isSelected && <span className="active-star-pin">⭐</span>}
-                    <div className="card-avatar-wrapper">
-                      {agent.avatar}
-                      {isPlayingVoice && (
-                        <span className="card-speaking-wave">🔊</span>
-                      )}
-                    </div>
-                    <span className="card-name-label">{isArabic ? agent.nameAr : agent.nameEn}</span>
-                    <span className="card-role-label">
-                      {isArabic ? agent.roleAr.split("&")[0].split("و")[0] : agent.roleEn.split("&")[0]}
-                    </span>
-                    <span className={`card-gender-pill ${agent.gender}`}>
-                      {agent.gender === "male" ? (isArabic ? "👨 رجل" : "👨 Male") : (isArabic ? "👩 أنثى" : "👩 Female")}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        previewAgentVoice(agent.id);
-                      }}
-                      className={`card-voice-test-btn ${isPlayingVoice ? "playing" : ""}`}
-                      title={isArabic ? `استمع لصوت ${agent.nameAr} (${agent.geminiVoice})` : `Preview ${agent.nameEn}'s voice (${agent.geminiVoice})`}
-                    >
-                      {isPlayingVoice ? (isArabic ? "🔊 يتحدث..." : "🔊 Speaking...") : `🎙️ ${agent.geminiVoice}`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+                    <span>👥</span>
+                    <span>{isArabic ? "تغيير المعلم" : "Switch"}</span>
+                  </button>
+                  <button
+                    onClick={() => setIsChatSidebarCollapsed(true)}
+                    className="classroom-collapse-btn"
+                    title={isArabic ? "إخفاء المحادثة لتوسيع مساحة السبورة" : "Hide chat to maximize whiteboard"}
+                  >
+                    ◀
+                  </button>
+                </div>
+              </div>
 
           {/* Active Coach Banner */}
           <div className="active-tutor-banner">
@@ -1956,28 +1909,51 @@ export const App: React.FC = () => {
             </div>
           </div>
         </aside>
+      )}
 
-        {/* Right/Left Main Stage: The Magic Board */}
-        <main className="magic-board-wrapper">
-          {/* Teacher Canvas Pointer Alert */}
-          {teacherPointerText && (
-            <div className="teacher-canvas-pointer">
-              <span className="pointer-avatar">{currentAgent.avatar}</span>
-              <span className="pointer-text">{teacherPointerText}</span>
-              <span>✨</span>
-            </div>
-          )}
+      {/* Right/Left Main Stage: The Magic Board */}
+      <main className={`magic-board-wrapper ${isChatSidebarCollapsed ? "fullwidth" : ""}`}>
+        {/* Teacher Canvas Pointer Alert */}
+        {teacherPointerText && (
+          <div className="teacher-canvas-pointer">
+            <span className="pointer-avatar">{currentAgent.avatar}</span>
+            <span className="pointer-text">{teacherPointerText}</span>
+            <span>✨</span>
+          </div>
+        )}
 
-          {/* Top Board Toolbar */}
-          <div className="magic-board-toolbar" style={{ position: "relative" }}>
-            <div className="board-title-group">
-              <span className="board-title-badge">
-                🎨 {isArabic ? "السبورة السحرية (The Magic Board)" : "The Magic Board"}
+        {/* Top Board Toolbar */}
+        <div className="magic-board-toolbar" style={{ position: "relative" }}>
+          <div className="board-title-group">
+            <span className="board-title-badge">
+              🎨 {isArabic ? "السبورة التفاعلية الذكية" : "Interactive Whiteboard"}
+            </span>
+            <span className="board-coach-tag">
+              {isArabic ? `مع ${currentAgent.nameAr}` : `With ${currentAgent.nameEn}`}
+            </span>
+            {studentProfile.name && (
+              <span className="board-student-tag" title="Student Profile">
+                🎓 {studentProfile.name}
               </span>
-              <span className="board-coach-tag">
-                {isArabic ? `مع ${currentAgent.nameAr}` : `With ${currentAgent.nameEn}`}
-              </span>
-            </div>
+            )}
+            <button
+              onClick={() => setAppStep("tutors_selection")}
+              className="board-tool-action-btn tool-switch-tutor-chip"
+              style={{ background: "#fef3c7", borderColor: "#f59e0b", color: "#92400e", fontWeight: 800 }}
+              title={isArabic ? "اختيار معلّم آخر من فريق المعلمين" : "Switch tutor"}
+            >
+              <span>👥</span>
+              <span>{isArabic ? "فريق المعلمين" : "Switch Tutor"}</span>
+            </button>
+            <button
+              onClick={() => setIsChatSidebarCollapsed(!isChatSidebarCollapsed)}
+              className="board-tool-action-btn"
+              style={{ background: "#f8fafc", borderColor: "#cbd5e1", color: "#334155" }}
+              title={isChatSidebarCollapsed ? (isArabic ? "إظهار لوحة المحادثة" : "Show Chat") : (isArabic ? "توسيع السبورة بالكامل" : "Expand Board Fullscreen")}
+            >
+              <span>{isChatSidebarCollapsed ? (isArabic ? "💬 إظهار المحادثة" : "Show Chat") : (isArabic ? "🖥️ توسيع السبورة" : "Maximize Board")}</span>
+            </button>
+          </div>
 
             <div className="board-actions-group">
               {/* Simulation Studio shortcut (Track 5) */}
@@ -2153,6 +2129,7 @@ export const App: React.FC = () => {
           </div>
         </main>
       </div>
+      )}
     </div>
   );
 };
