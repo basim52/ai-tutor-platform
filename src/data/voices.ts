@@ -262,17 +262,19 @@ export function stopCurrentSpeech(): void {
 }
 
 /**
- * Plays raw base64 WAV audio (e.g. from Gemini TTS stream)
+ * Plays raw base64 WAV audio (e.g. from Gemini TTS stream) with playback speed control.
  */
 export function playBase64Audio({
   audioBase64,
   mimeType = "audio/wav",
+  playbackRate = 1.0,
   onStart,
   onEnd,
   onError
 }: {
   audioBase64: string;
   mimeType?: string;
+  playbackRate?: number;
   onStart?: () => void;
   onEnd?: () => void;
   onError?: () => void;
@@ -283,6 +285,9 @@ export function playBase64Audio({
   try {
     const audio = new Audio(`data:${mimeType};base64,${audioBase64}`);
     currentAudioElement = audio;
+    if (playbackRate && playbackRate > 0) {
+      audio.playbackRate = playbackRate;
+    }
 
     audio.onplay = () => {
       if (thisId === currentSpeechRequestId && onStart) {
@@ -437,8 +442,6 @@ export function resolveDistinctVoices(
 }
 
 /**
-
-/**
  * Speaks text directly with the tutor's designated voice identity.
  * Plays direct character voice without pitch distortion, beeps, or voice conversion.
  */
@@ -447,6 +450,7 @@ export function playAgentVoiceSpeech({
   agentId,
   assignedVoice,
   allVoices = [],
+  playbackRate = 1.0,
   onStart,
   onEnd,
   onError
@@ -455,6 +459,7 @@ export function playAgentVoiceSpeech({
   agentId: string;
   assignedVoice: SpeechSynthesisVoice | null;
   allVoices?: SpeechSynthesisVoice[];
+  playbackRate?: number;
   onStart?: () => void;
   onEnd?: () => void;
   onError?: () => void;
@@ -518,7 +523,7 @@ export function playAgentVoiceSpeech({
     }
 
     utterance.pitch = 1.0; // Direct natural voice pitch (no distortion or conversion)
-    utterance.rate = profile.rate; // Natural character pacing
+    utterance.rate = Math.max(0.5, Math.min(2.0, (profile.rate || 1.0) * (playbackRate || 1.0))); // Natural character pacing * user multiplier
 
     utterance.onstart = () => {
       if (thisRequestId === currentSpeechRequestId && onStart) onStart();
@@ -535,11 +540,12 @@ export function playAgentVoiceSpeech({
     window.speechSynthesis.speak(utterance);
   };
 
-  // 1. If high-fidelity neural audio is cached for this tutor, play directly
+  // 1. If high-fidelity neural audio is cached for this tutor, play directly with speed control
   if (ttsAudioCache.has(cacheKey)) {
     const cachedBase64 = ttsAudioCache.get(cacheKey)!;
     playBase64Audio({
       audioBase64: cachedBase64,
+      playbackRate,
       onStart,
       onEnd,
       onError: runDirectSpeech
@@ -549,4 +555,112 @@ export function playAgentVoiceSpeech({
 
   // 2. Play direct character voice immediately without delay or conversion
   runDirectSpeech();
+}
+
+/**
+ * On-demand helper: tries cache -> /api/tts -> SpeechSynthesis fallback.
+ * Allows re-listening or on-demand voice preview at adjustable speed.
+ */
+export async function playOrFetchAgentVoice({
+  text,
+  agentId,
+  assignedVoice,
+  allVoices = [],
+  playbackRate = 1.0,
+  onStart,
+  onEnd,
+  onError
+}: {
+  text: string;
+  agentId: string;
+  assignedVoice: SpeechSynthesisVoice | null;
+  allVoices?: SpeechSynthesisVoice[];
+  playbackRate?: number;
+  onStart?: () => void;
+  onEnd?: () => void;
+  onError?: () => void;
+}): Promise<void> {
+  const cleanText = text
+    .replace(/[*#_`$]/g, "")
+    .replace(/\(.*?\)/g, "")
+    .replace(/\[.*?\]/g, "")
+    .trim();
+
+  if (!cleanText) {
+    if (onEnd) onEnd();
+    return;
+  }
+
+  const cacheKey = `${agentId}_${cleanText}`;
+
+  // 1. If cached, play immediately
+  if (ttsAudioCache.has(cacheKey)) {
+    playBase64Audio({
+      audioBase64: ttsAudioCache.get(cacheKey)!,
+      playbackRate,
+      onStart,
+      onEnd,
+      onError: () => {
+        playAgentVoiceSpeech({
+          text,
+          agentId,
+          assignedVoice,
+          allVoices,
+          playbackRate,
+          onStart,
+          onEnd,
+          onError
+        });
+      }
+    });
+    return;
+  }
+
+  // 2. Try fetching from /api/tts
+  try {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: cleanText, agentId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.audioBase64) {
+        ttsAudioCache.set(cacheKey, data.audioBase64);
+        playBase64Audio({
+          audioBase64: data.audioBase64,
+          playbackRate,
+          onStart,
+          onEnd,
+          onError: () => {
+            playAgentVoiceSpeech({
+              text,
+              agentId,
+              assignedVoice,
+              allVoices,
+              playbackRate,
+              onStart,
+              onEnd,
+              onError
+            });
+          }
+        });
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("TTS fetch fallback:", err);
+  }
+
+  // 3. Fallback to direct speech synthesis
+  playAgentVoiceSpeech({
+    text,
+    agentId,
+    assignedVoice,
+    allVoices,
+    playbackRate,
+    onStart,
+    onEnd,
+    onError
+  });
 }
