@@ -1,85 +1,698 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Whiteboard } from "./Whiteboard";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Whiteboard, WhiteboardRef } from "./Whiteboard";
+import {
+  TUTOR_QUIZZES,
+  ACHIEVEMENTS,
+  calculateLevel,
+  QuizQuestion
+} from "./data/challenges";
+import {
+  EDUCATIONAL_TEMPLATES,
+  EducationalTemplate
+} from "./data/templates";
+import {
+  SavedSession,
+  getSavedSessions,
+  saveSessionToArchive,
+  deleteSavedSession,
+  generateLessonReport
+} from "./data/sessions";
+import {
+  SIMULATION_PACKS,
+  SimulationPack
+} from "./data/simulations";
+import {
+  AGENT_VOICE_PROFILES,
+  resolveDistinctVoices,
+  playAgentVoiceSpeech,
+  playBase64Audio,
+  stopCurrentSpeech,
+  cacheAgentAudio
+} from "./data/voices";
+import "./App.css";
 
 interface Agent {
   id: string;
-  name: string;
-  role: string;
+  nameEn: string;
+  nameAr: string;
+  roleEn: string;
+  roleAr: string;
   avatar: string;
+  quoteEn: string;
+  quoteAr: string;
+  colorClass: string;
+  badgeColor: string;
+  sampleChallenge: string;
+  gender: "male" | "female";
+  geminiVoice: "Puck" | "Fenrir" | "Charon" | "Aoede" | "Kore" | "Leda";
+  genderLabelAr: string;
+  genderLabelEn: string;
+  personaAr: string;
+  personaEn: string;
+  voicePitch: number;
+  voiceRate: number;
 }
 
 const AGENTS: Agent[] = [
-  { id: "foundation", name: "Adam", role: "Grammar & Basics", avatar: "📖" },
-  { id: "free_talk", name: "Sarah", role: "Casual & Idioms", avatar: "💬" },
-  { id: "business_pro", name: "David", role: "Business & Interviews", avatar: "💼" },
-  { id: "ielts_examiner", name: "Victoria", role: "IELTS Examiner", avatar: "🎯" },
-  { id: "phonetics", name: "Liam", role: "Pronunciation", avatar: "🗣️" },
-  { id: "roleplay", name: "Elena", role: "Real-world Scenarios", avatar: "🎭" }
+  {
+    id: "foundation",
+    nameEn: "Adam",
+    nameAr: "آدم",
+    roleEn: "Grammar & Basics",
+    roleAr: "القواعد والأساسيات",
+    avatar: "📚",
+    quoteEn: "Let's master sentence structure! 🏗️",
+    quoteAr: "لنبنِ جملاً صحيحة وقوية! 🏗️",
+    colorClass: "card-foundation",
+    badgeColor: "#3b82f6",
+    sampleChallenge: "Fix this sentence: 'She have went to school yesterday.'",
+    gender: "male",
+    geminiVoice: "Puck",
+    genderLabelAr: "صوت رجل هادئ",
+    genderLabelEn: "Male (Calm)",
+    personaAr: "شخصية رجل: هادئ، واثق، وصبور لتبسيط القواعد 👨‍🏫",
+    personaEn: "Male Persona: Calm, steady & patient grammar coach 👨‍🏫",
+    voicePitch: 0.94,
+    voiceRate: 0.90
+  },
+  {
+    id: "free_talk",
+    nameEn: "Sarah",
+    nameAr: "سارة",
+    roleEn: "Casual & Idioms",
+    roleAr: "المحادثة والطلاقة",
+    avatar: "💬",
+    quoteEn: "Chat naturally like a native speaker! ☕",
+    quoteAr: "تحدث بعفوية وأسلوب شيق! ☕",
+    colorClass: "card-free_talk",
+    badgeColor: "#f59e0b",
+    sampleChallenge: "Idiom challenge: What does 'Once in a blue moon' mean?",
+    gender: "female",
+    geminiVoice: "Aoede",
+    genderLabelAr: "صوت نسائي حيوي",
+    genderLabelEn: "Female (Lively)",
+    personaAr: "شخصية نسائية: دافئة، عفوية، ومبتهجة للطلاقة 👩‍💼",
+    personaEn: "Female Persona: Energetic, warm & friendly conversationalist 👩‍💼",
+    voicePitch: 1.24,
+    voiceRate: 1.04
+  },
+  {
+    id: "business_pro",
+    nameEn: "David",
+    nameAr: "ديفيد",
+    roleEn: "Corporate & Interviews",
+    roleAr: "الإنجليزية المهنية والمقابلات",
+    avatar: "💼",
+    quoteEn: "Elevate your executive presence! 📈",
+    quoteAr: "تميّز في اجتماعاتك ومقابلات العمل! 📈",
+    colorClass: "card-business_pro",
+    badgeColor: "#10b981",
+    sampleChallenge: "Email draft: 'Dear Sir, I am writing to follow up regarding our proposal.'",
+    gender: "male",
+    geminiVoice: "Fenrir",
+    genderLabelAr: "صوت رجل تنفيذي",
+    genderLabelEn: "Male (Executive)",
+    personaAr: "شخصية رجل: تنفيذي عميق النبرة، رسمي، ومحترف 💼",
+    personaEn: "Male Persona: Deep executive baritone for business meetings 💼",
+    voicePitch: 0.78,
+    voiceRate: 0.92
+  },
+  {
+    id: "ielts_examiner",
+    nameEn: "Victoria",
+    nameAr: "فيكتوريا",
+    roleEn: "IELTS Examiner",
+    roleAr: "مدربة اختبار الآيلتس",
+    avatar: "🎯",
+    quoteEn: "Reach Band 8.0+ criteria! 🏅",
+    quoteAr: "حقّق أهدافك في الآيلتس بدرجة 8+! 🏅",
+    colorClass: "card-ielts_examiner",
+    badgeColor: "#ec4899",
+    sampleChallenge: "Speaking Part 2: Describe an environmental project in your city.",
+    gender: "female",
+    geminiVoice: "Kore",
+    genderLabelAr: "صوت نسائي بريطاني",
+    genderLabelEn: "Female (British Academic)",
+    personaAr: "شخصية نسائية: بريطانية أكاديمية فخمة وراقية 🎯",
+    personaEn: "Female Persona: Refined British academic IELTS examiner 🎯",
+    voicePitch: 1.08,
+    voiceRate: 0.86
+  },
+  {
+    id: "phonetics",
+    nameEn: "Liam",
+    nameAr: "ليام",
+    roleEn: "Pronunciation & IPA",
+    roleAr: "مخارج الحروف والنطق",
+    avatar: "🎤",
+    quoteEn: "Refine every phoneme and stress! 🎧",
+    quoteAr: "أتقن مخارج الحروف واللكنة بدقة! 🎧",
+    colorClass: "card-phonetics",
+    badgeColor: "#8b5cf6",
+    sampleChallenge: "Pronunciation tip: Contrast 'ship' /ʃɪp/ vs 'sheep' /ʃiːp/.",
+    gender: "male",
+    geminiVoice: "Charon",
+    genderLabelAr: "صوت رجل مخارج الحروف",
+    genderLabelEn: "Male (Phonetician)",
+    personaAr: "شخصية رجل: خبير صوتيات دقيق ومتمهل في النطق 🎧",
+    personaEn: "Male Persona: Articulate phonetician highlighting IPA stress 🎧",
+    voicePitch: 0.88,
+    voiceRate: 0.78
+  },
+  {
+    id: "roleplay",
+    nameEn: "Elena",
+    nameAr: "إيلينا",
+    roleEn: "Real-World Scenarios",
+    roleAr: "سيناريوهات ومواقف واقعية",
+    avatar: "🎭",
+    quoteEn: "Immerse into dynamic roleplays! ✈️",
+    quoteAr: "عِش المواقف اليومية وكأنك هناك! ✈️",
+    colorClass: "card-roleplay",
+    badgeColor: "#f97316",
+    sampleChallenge: "Scenario: You are at an airport transit desk checking your connection.",
+    gender: "female",
+    geminiVoice: "Leda",
+    genderLabelAr: "صوت نسائي مسرحي",
+    genderLabelEn: "Female (Theatrical)",
+    personaAr: "شخصية نسائية: درامية معبّرة لتمثيل سيناريوهات الحياة 🎭",
+    personaEn: "Female Persona: Theatrical, dynamic roleplay actress 🎭",
+    voicePitch: 1.30,
+    voiceRate: 0.98
+  }
 ];
 
+interface ChatMessage {
+  id: string;
+  sender: "user" | "agent";
+  text: string;
+  timestamp: string;
+  imageBase64?: string | null;
+  agentName?: string;
+}
+
+interface Particle {
+  id: number;
+  emoji: string;
+  x: number;
+  y: number;
+}
+
 export const App: React.FC = () => {
+  const [lang, setLang] = useState<"ar" | "en">("ar");
   const [selectedAgent, setSelectedAgent] = useState<string>("foundation");
-  const [messages, setMessages] = useState<{ sender: "user" | "agent"; text: string }[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState<string>("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [isTutorSpeaking, setIsTutorSpeaking] = useState<boolean>(false);
+  const [voiceAutoSpeak, setVoiceAutoSpeak] = useState<boolean>(true);
+  const [celebrationToast, setCelebrationToast] = useState<string | null>(null);
+  const [particles, setParticles] = useState<Particle[]>([]);
+
+  // Track 2: Gamification
+  const [xp, setXp] = useState<number>(() => {
+    const saved = localStorage.getItem("ai_tutor_xp");
+    return saved ? parseInt(saved, 10) : 220;
+  });
+  const [streak, setStreak] = useState<number>(() => {
+    const saved = localStorage.getItem("ai_tutor_streak");
+    return saved ? parseInt(saved, 10) : 4;
+  });
+  const [unlockedBadges, setUnlockedBadges] = useState<string[]>(() => {
+    const saved = localStorage.getItem("ai_tutor_badges");
+    return saved ? JSON.parse(saved) : ["first_step"];
+  });
+  const [visitedTutors, setVisitedTutors] = useState<string[]>(["foundation"]);
+
+  // Track 3: Templates & Sticky Color Palette
+  const [showTemplatesModal, setShowTemplatesModal] = useState<boolean>(false);
+  const [showColorPalette, setShowColorPalette] = useState<boolean>(false);
+  const [selectedStickyColor, setSelectedStickyColor] = useState<"yellow" | "green" | "blue" | "violet" | "red">("yellow");
+
+  // Track 4: Saved Sessions Archive & Lesson Report Card
+  const [showArchiveModal, setShowArchiveModal] = useState<boolean>(false);
+  const [savedSessionsList, setSavedSessionsList] = useState<SavedSession[]>(() => getSavedSessions());
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [currentReport, setCurrentReport] = useState<SavedSession | null>(null);
+
+  // Track 5: Simulation Studio, HUD & Timers
+  const [showSimulationStudioModal, setShowSimulationStudioModal] = useState<boolean>(false);
+  const [activeSimulation, setActiveSimulation] = useState<SimulationPack | null>(null);
+  const [currentStageIndex, setCurrentStageIndex] = useState<number>(0);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(90);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const [showScorecardModal, setShowScorecardModal] = useState<boolean>(false);
+  const [scorecardResults, setScorecardResults] = useState<any | null>(null);
+
+  // Modals for Track 2
+  const [showBadgesModal, setShowBadgesModal] = useState<boolean>(false);
+  const [showQuizModal, setShowQuizModal] = useState<boolean>(false);
+  const [activeQuiz, setActiveQuiz] = useState<QuizQuestion | null>(null);
+  const [quizSelectedOption, setQuizSelectedOption] = useState<number | null>(null);
+  const [quizAnswered, setQuizAnswered] = useState<boolean>(false);
+
+  // Track 1: Teacher pointer alert on canvas
+  const [teacherPointerText, setTeacherPointerText] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
+  const whiteboardRef = useRef<WhiteboardRef>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const pointerTimeoutRef = useRef<number | null>(null);
 
+  const isArabic = lang === "ar";
+  const currentAgent = AGENTS.find((a) => a.id === selectedAgent) || AGENTS[0];
+  const levelData = calculateLevel(xp);
+
+  // Countdown timer for simulations (Track 5)
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8080");
-    socketRef.current = ws;
-    setSocket(ws);
-
-    ws.onopen = () => {
-      setIsConnected(true);
-      ws.send(JSON.stringify({ type: "START_SESSION", agentId: selectedAgent }));
+    let interval: any = null;
+    if (activeSimulation && isTimerRunning && secondsRemaining > 0) {
+      interval = setInterval(() => {
+        setSecondsRemaining((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
     };
+  }, [activeSimulation, isTimerRunning, secondsRemaining]);
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      setSocket(null);
-    };
+  // Trigger celebration particle spray
+  const triggerCelebration = useCallback((message?: string) => {
+    const emojis = ["⭐", "✨", "🌟", "💖", "🎉", "🎈", "🎨"];
+    const newParticles: Particle[] = Array.from({ length: 14 }).map((_, i) => ({
+      id: Date.now() + i,
+      emoji: emojis[Math.floor(Math.random() * emojis.length)],
+      x: 30 + Math.random() * 40,
+      y: 40 + Math.random() * 30
+    }));
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "AGENT_RESPONSE") {
-          setIsTyping(false);
-          setMessages((prev) => [...prev, { sender: "agent", text: data.text }]);
-        }
-      } catch (err) {
-        console.error(err);
+    setParticles(newParticles);
+    if (message) {
+      setCelebrationToast(message);
+      setTimeout(() => setCelebrationToast(null), 3000);
+    }
+
+    setTimeout(() => {
+      setParticles([]);
+    }, 1600);
+  }, []);
+
+  // Award XP and check badges
+  const awardXp = useCallback((amount: number, reasonAr: string, reasonEn: string) => {
+    setXp((prev) => {
+      const updated = prev + amount;
+      localStorage.setItem("ai_tutor_xp", updated.toString());
+      return updated;
+    });
+
+    triggerCelebration(isArabic ? `+${amount} XP! ${reasonAr}` : `+${amount} XP! ${reasonEn}`);
+  }, [isArabic, triggerCelebration]);
+
+  // Unlock badge
+  const unlockBadge = useCallback((badgeId: string) => {
+    setUnlockedBadges((prev) => {
+      if (prev.includes(badgeId)) return prev;
+      const updated = [...prev, badgeId];
+      localStorage.setItem("ai_tutor_badges", JSON.stringify(updated));
+      const badge = ACHIEVEMENTS.find((b) => b.id === badgeId);
+      if (badge) {
+        triggerCelebration(
+          isArabic
+            ? `وسام جديد مفتوح: ${badge.titleAr}! 🏆`
+            : `New Badge Unlocked: ${badge.titleEn}! 🏆`
+        );
+      }
+      return updated;
+    });
+  }, [isArabic, triggerCelebration]);
+
+  // Track distinct voices per agent to guarantee no duplicate voices
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [assignedVoices, setAssignedVoices] = useState<Record<string, SpeechSynthesisVoice | null>>({});
+  const [playingVoiceAgentId, setPlayingVoiceAgentId] = useState<string | null>(null);
+
+  // Initialize and load non-duplicated voices dynamically
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        setAvailableVoices(voices);
+        const resolved = resolveDistinctVoices(voices);
+        setAssignedVoices(resolved);
       }
     };
 
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
     return () => {
-      ws.close();
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
     };
   }, []);
 
+  // Text-to-Speech handler with distinct voice identities (Male / Female tailored)
+  const handleSpeak = useCallback((text: string, targetAgentId?: string) => {
+    const agentIdToUse = targetAgentId || selectedAgent;
+    const assignedVoice = assignedVoices[agentIdToUse] || null;
+
+    setPlayingVoiceAgentId(agentIdToUse);
+    setIsTutorSpeaking(true);
+
+    playAgentVoiceSpeech({
+      text,
+      agentId: agentIdToUse,
+      assignedVoice,
+      allVoices: availableVoices,
+      onStart: () => {
+        setIsTutorSpeaking(true);
+        setPlayingVoiceAgentId(agentIdToUse);
+      },
+      onEnd: () => {
+        setIsTutorSpeaking(false);
+        setPlayingVoiceAgentId(null);
+      },
+      onError: () => {
+        setIsTutorSpeaking(false);
+        setPlayingVoiceAgentId(null);
+      }
+    });
+  }, [selectedAgent, assignedVoices, availableVoices]);
+
+  // Preview Voice greeting for any tutor
+  const previewAgentVoice = useCallback((agentId: string) => {
+    const profile = AGENT_VOICE_PROFILES[agentId];
+    if (!profile) return;
+    const greeting = isArabic ? profile.sampleGreetingAr : profile.sampleGreetingEn;
+    handleSpeak(greeting, agentId);
+    triggerCelebration(
+      isArabic
+        ? `استمع لنبرة ${profile.nameAr} (${profile.genderAr}) 🎙️`
+        : `Previewing ${profile.nameEn}'s voice (${profile.genderEn}) 🎙️`
+    );
+  }, [isArabic, handleSpeak, triggerCelebration]);
+
+  // Activate teacher pointer on canvas
+  const showTeacherPointer = useCallback((text: string) => {
+    setTeacherPointerText(text);
+    if (pointerTimeoutRef.current) clearTimeout(pointerTimeoutRef.current);
+    pointerTimeoutRef.current = window.setTimeout(() => {
+      setTeacherPointerText(null);
+    }, 4500);
+  }, []);
+
+  // WebSocket connection & lifecycle
+  useEffect(() => {
+    let isMounted = true;
+
+    const connect = () => {
+      if (!isMounted) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
+      setSocket(ws);
+
+      ws.onopen = () => {
+        if (!isMounted) return;
+        setIsConnected(true);
+        ws.send(JSON.stringify({ type: "START_SESSION", agentId: selectedAgent }));
+      };
+
+      ws.onclose = () => {
+        if (!isMounted) return;
+        setIsConnected(false);
+        setSocket(null);
+        reconnectTimeoutRef.current = window.setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (err) => {
+        console.warn("WebSocket status:", err);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "AGENT_RESPONSE") {
+            setIsTyping(false);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Math.random().toString(36).substring(2, 9),
+                sender: "agent",
+                text: data.text,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                agentName: currentAgent.nameEn
+              }
+            ]);
+
+            const agentIdToUse = data.agentId || selectedAgent;
+
+            if (data.audioBase64 && data.text) {
+              cacheAgentAudio(agentIdToUse, data.text, data.audioBase64);
+            }
+
+            if (voiceAutoSpeak && data.text) {
+              if (data.audioBase64) {
+                // Direct neural audio playback for the character
+                setPlayingVoiceAgentId(agentIdToUse);
+                setIsTutorSpeaking(true);
+                playBase64Audio({
+                  audioBase64: data.audioBase64,
+                  onStart: () => {
+                    setIsTutorSpeaking(true);
+                    setPlayingVoiceAgentId(agentIdToUse);
+                  },
+                  onEnd: () => {
+                    setIsTutorSpeaking(false);
+                    setPlayingVoiceAgentId(null);
+                  },
+                  onError: () => {
+                    // Direct character voice fallback if audio element fails
+                    handleSpeak(data.text, agentIdToUse);
+                  }
+                });
+              } else {
+                // Direct character voice playback without tone beeps or pitch alteration
+                handleSpeak(data.text, agentIdToUse);
+              }
+            }
+
+            awardXp(15, "محادثة مثمرة مع المعلم", "Fruitful chat with tutor");
+            showTeacherPointer(isArabic ? `شرح ${currentAgent.nameAr} جاهز!` : `${currentAgent.nameEn}'s explanation is ready!`);
+          } else if (data.type === "AGENT_AUDIO") {
+            // Direct audio safety handler
+            if (voiceAutoSpeak && data.audioBase64) {
+              const agentIdToUse = data.agentId || selectedAgent;
+              if (data.text) cacheAgentAudio(agentIdToUse, data.text, data.audioBase64);
+              setPlayingVoiceAgentId(agentIdToUse);
+              setIsTutorSpeaking(true);
+              playBase64Audio({
+                audioBase64: data.audioBase64,
+                onStart: () => {
+                  setIsTutorSpeaking(true);
+                  setPlayingVoiceAgentId(agentIdToUse);
+                },
+                onEnd: () => {
+                  setIsTutorSpeaking(false);
+                  setPlayingVoiceAgentId(null);
+                },
+                onError: () => {
+                  setIsTutorSpeaking(false);
+                  setPlayingVoiceAgentId(null);
+                }
+              });
+            }
+          } else if (data.type === "ERROR") {
+            setIsTyping(false);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: Math.random().toString(36).substring(2, 9),
+                sender: "agent",
+                text: `⚠️ ${data.error}`,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                agentName: currentAgent.nameEn
+              }
+            ]);
+          }
+        } catch (err) {
+          console.error("Message parse error:", err);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      socketRef.current?.close();
+    };
+  }, [selectedAgent, voiceAutoSpeak, handleSpeak, awardXp, showTeacherPointer, isArabic, currentAgent.nameAr, currentAgent.nameEn]);
+
+  // Scroll chat to bottom
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  const switchAgent = (agentId: string) => {
-    setSelectedAgent(agentId);
-    setMessages([]);
-    setIsTyping(false);
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: "START_SESSION", agentId }));
+  // Speech Recognition
+  const toggleSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert(isArabic ? "ميزة التعرف الصوتي غير مدعومة في هذا المتصفح." : "Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = selectedAgent === "phonetics" || selectedAgent === "foundation" ? "en-US" : (isArabic ? "ar-SA" : "en-US");
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        unlockBadge("voice_pioneer");
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputVal((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        setIsListening(false);
+        awardXp(10, "تحدث صوتي بنجاح", "Successful speech practice");
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.warn("Speech recognition error:", e);
+      setIsListening(false);
     }
   };
 
-  const handleSend = () => {
-    if (!inputVal.trim() || !socketRef.current) return;
-    const text = inputVal.trim();
-    setMessages((prev) => [...prev, { sender: "user", text }]);
-    setInputVal("");
+  // Switch Tutor
+  const switchAgent = (agentId: string) => {
+    stopCurrentSpeech();
+    setSelectedAgent(agentId);
+    setMessages([]);
+    setIsTyping(false);
+    const agent = AGENTS.find((a) => a.id === agentId) || AGENTS[0];
+
+    if (!visitedTutors.includes(agentId)) {
+      const updated = [...visitedTutors, agentId];
+      setVisitedTutors(updated);
+      if (updated.length === 6) {
+        unlockBadge("all_tutors");
+      }
+    }
+
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "START_SESSION", agentId }));
+    }
+
+    if (voiceAutoSpeak) {
+      const greeting = isArabic ? agent.quoteAr : agent.quoteEn;
+      handleSpeak(greeting, agentId);
+    }
+
+    triggerCelebration(
+      isArabic
+        ? `أهلاً بك مع ${agent.nameAr} (${agent.genderLabelAr})! 🎨`
+        : `Welcome to ${agent.nameEn}'s studio (${agent.genderLabelEn})! 🎨`
+    );
+  };
+
+  // Send message
+  const handleSend = async (customText?: string) => {
+    const textToSend = (customText || inputVal).trim();
+    if (!textToSend) return;
+
+    const userMsg: ChatMessage = {
+      id: Math.random().toString(36).substring(2, 9),
+      sender: "user",
+      text: textToSend,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    if (!customText) setInputVal("");
     setIsTyping(true);
-    socketRef.current.send(JSON.stringify({ type: "USER_MESSAGE", text }));
+
+    let imageBase64: string | null = null;
+    try {
+      if (whiteboardRef.current) {
+        imageBase64 = await whiteboardRef.current.getCanvasSnapshot();
+      }
+    } catch (e) {
+      console.warn("Snapshot capture warning:", e);
+    }
+
+    if (imageBase64) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === userMsg.id ? { ...m, imageBase64 } : m))
+      );
+    }
+
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "USER_MESSAGE", text: textToSend, imageBase64 }));
+    } else {
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agentId: selectedAgent, text: textToSend, imageBase64 })
+        });
+        const data = await res.json();
+        setIsTyping(false);
+        if (data.text) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Math.random().toString(36).substring(2, 9),
+              sender: "agent",
+              text: data.text,
+              timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              agentName: currentAgent.nameEn
+            }
+          ]);
+          if (voiceAutoSpeak) handleSpeak(data.text);
+          awardXp(15, "محادثة مثمرة", "Good chat response");
+        }
+      } catch (err: any) {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Math.random().toString(36).substring(2, 9),
+            sender: "agent",
+            text: `⚠️ Error: ${err.message}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          }
+        ]);
+      }
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -89,222 +702,1459 @@ export const App: React.FC = () => {
     }
   };
 
-  const currentAgent = AGENTS.find((a) => a.id === selectedAgent) || AGENTS[0];
+  // Add sample exercise on canvas
+  const handleAddSampleExercise = () => {
+    if (whiteboardRef.current) {
+      whiteboardRef.current.addNote(
+        `🎯 ${currentAgent.nameEn}'s Challenge:\n${currentAgent.sampleChallenge}`,
+        selectedStickyColor
+      );
+      unlockBadge("board_artist");
+      awardXp(20, "إدراج تمرين على السبورة", "Placed board challenge");
+      showTeacherPointer(isArabic ? `تمرين ${currentAgent.nameAr} وصل للسبورة!` : `Challenge placed on board!`);
+    }
+  };
+
+  const handleClearBoard = () => {
+    if (whiteboardRef.current) {
+      whiteboardRef.current.clear();
+      triggerCelebration(isArabic ? "تم مسح السبورة! 🧽" : "Board wiped clean! 🧽");
+    }
+  };
+
+  const handlePinFeedbackToCanvas = (content: string) => {
+    if (whiteboardRef.current) {
+      whiteboardRef.current.addNote(`💡 Note from ${currentAgent.nameEn}:\n${content.slice(0, 180)}`, "green");
+      unlockBadge("board_artist");
+      awardXp(15, "تثبيت ملاحظة على السبورة", "Pinned note to board");
+    }
+  };
+
+  // Track 3: Insert Educational Template
+  const handleInsertTemplate = (template: EducationalTemplate) => {
+    if (whiteboardRef.current) {
+      whiteboardRef.current.insertTemplate(template.canvasTitle, template.sections);
+      setShowTemplatesModal(false);
+      unlockBadge("board_artist");
+      awardXp(30, "إدراج قالب تعليمي منظم", "Inserted educational template");
+      triggerCelebration(isArabic ? `تم إدراج قالب ${template.nameAr}! 📋` : `Template ${template.nameEn} inserted! 📋`);
+      showTeacherPointer(isArabic ? "القالب التعليمي جاهز على اللوحة!" : "Educational template is ready on canvas!");
+    }
+  };
+
+  // Track 3 & 4: Download high-res whiteboard snapshot
+  const handleDownloadBoard = async () => {
+    if (whiteboardRef.current) {
+      const ok = await whiteboardRef.current.downloadSnapshot(`whiteboard_${selectedAgent}_${Date.now()}.png`);
+      if (ok) {
+        awardXp(20, "تصدير السبورة كملف صورة", "Exported canvas PNG");
+        triggerCelebration(isArabic ? "تم تحميل السبورة كملف صورة عالي الدقة! 📸" : "Whiteboard PNG exported successfully! 📸");
+      }
+    }
+  };
+
+  // Track 4: End session & generate lesson evaluation report
+  const handleEndSessionAndReport = async () => {
+    let canvasSnapshot: string | null = null;
+    if (whiteboardRef.current) {
+      try {
+        canvasSnapshot = await whiteboardRef.current.getCanvasSnapshot();
+      } catch (e) {
+        console.warn("Could not capture snapshot for report", e);
+      }
+    }
+
+    const report = generateLessonReport({
+      agentId: selectedAgent,
+      agentName: currentAgent.nameEn,
+      agentRole: currentAgent.roleEn,
+      agentAvatar: currentAgent.avatar,
+      messages,
+      canvasSnapshot,
+      xpSession: messages.length * 15 + 30
+    });
+
+    const updatedList = saveSessionToArchive(report);
+    setSavedSessionsList(updatedList);
+    setCurrentReport(report);
+    setShowReportModal(true);
+    awardXp(40, "إنهاء الجلسة واستخراج تقرير التقييم!", "Completed lesson report!");
+  };
+
+  // Track 5: Simulation Studio handlers
+  const handleStartSimulation = (pack: SimulationPack) => {
+    setActiveSimulation(pack);
+    setCurrentStageIndex(0);
+    setSecondsRemaining(pack.stages[0].suggestedDurationSeconds);
+    setIsTimerRunning(true);
+    setShowSimulationStudioModal(false);
+
+    // Switch to required specialist tutor
+    setSelectedAgent(pack.agentId);
+
+    // Write stage template onto whiteboard
+    if (whiteboardRef.current) {
+      whiteboardRef.current.addNote(pack.stages[0].boardTemplateNote, "violet", 80, 80);
+    }
+
+    // Add teacher's question to chat
+    const agent = AGENTS.find((a) => a.id === pack.agentId) || AGENTS[0];
+    const initialPrompt = pack.stages[0].promptEn;
+    setMessages([
+      {
+        id: Math.random().toString(36).substring(2, 9),
+        sender: "agent",
+        text: initialPrompt,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        agentName: agent.nameEn
+      }
+    ]);
+
+    if (voiceAutoSpeak) {
+      handleSpeak(initialPrompt);
+    }
+
+    awardXp(30, "بدء جلسة محاكاة واقعية جديدة!", "Started realistic simulation session!");
+    triggerCelebration(isArabic ? `بدأت محاكاة ${pack.titleAr}! 🎬` : `Started ${pack.titleEn}! 🎬`);
+  };
+
+  const handleNextSimulationStage = () => {
+    if (!activeSimulation) return;
+    const nextIdx = currentStageIndex + 1;
+    if (nextIdx < activeSimulation.stages.length) {
+      setCurrentStageIndex(nextIdx);
+      const stage = activeSimulation.stages[nextIdx];
+      setSecondsRemaining(stage.suggestedDurationSeconds);
+      setIsTimerRunning(true);
+
+      // Write next stage note on board
+      if (whiteboardRef.current) {
+        whiteboardRef.current.addNote(stage.boardTemplateNote, "blue", 100, 140 + nextIdx * 45);
+      }
+
+      // Add teacher prompt to chat
+      const agent = AGENTS.find((a) => a.id === activeSimulation.agentId) || AGENTS[0];
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          sender: "agent",
+          text: stage.promptEn,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          agentName: agent.nameEn
+        }
+      ]);
+
+      if (voiceAutoSpeak) handleSpeak(stage.promptEn);
+      awardXp(30, "الانتقال إلى المرحلة التالية!", "Advanced to next stage!");
+    } else {
+      // Completed all stages! Generate official Scorecard
+      setIsTimerRunning(false);
+      const grade = activeSimulation.id === "ielts_speaking" ? "Band 8.0" : "94% Excellent";
+      setScorecardResults({
+        pack: activeSimulation,
+        finalGrade: grade,
+        criteriaScores: activeSimulation.criteriaList.map((c) => ({
+          nameAr: c.nameAr,
+          nameEn: c.nameEn,
+          weight: c.weight,
+          score: activeSimulation.id === "ielts_speaking" ? (Math.random() > 0.5 ? "8.5" : "8.0") : "95%"
+        }))
+      });
+      setShowScorecardModal(true);
+      awardXp(100, "إكمال المحاكاة بنجاح باهر! 🏆", "Completed full simulation with distinction! 🏆");
+      triggerCelebration();
+    }
+  };
+
+  const handleExitSimulation = () => {
+    setActiveSimulation(null);
+    setIsTimerRunning(false);
+    triggerCelebration(isArabic ? "تم إنهاء وضع المحاكاة والعودة للوضع الحر." : "Exited simulation mode.");
+  };
+
+  // Speed Quiz handler (Track 2)
+  const openSpeedQuiz = () => {
+    const tutorQuizzes = TUTOR_QUIZZES[selectedAgent] || TUTOR_QUIZZES.foundation;
+    const randomQuiz = tutorQuizzes[Math.floor(Math.random() * tutorQuizzes.length)];
+    setActiveQuiz(randomQuiz);
+    setQuizSelectedOption(null);
+    setQuizAnswered(false);
+    setShowQuizModal(true);
+  };
+
+  const handleSelectQuizOption = (index: number) => {
+    if (quizAnswered || !activeQuiz) return;
+    setQuizSelectedOption(index);
+    setQuizAnswered(true);
+
+    const isCorrect = activeQuiz.options[index].isCorrect;
+    if (isCorrect) {
+      awardXp(50, "إجابة صحيحة في التحدي السريع!", "Correct speed quiz answer!");
+      unlockBadge("speed_solver");
+    } else {
+      awardXp(10, "محاولة تدريبية شجاعة", "Good learning attempt");
+    }
+  };
+
+  const handlePinQuizToBoard = () => {
+    if (whiteboardRef.current && activeQuiz) {
+      const note = activeQuiz.whiteboardNoteText || `💡 ${activeQuiz.topicEn}:\n${activeQuiz.questionEn}`;
+      whiteboardRef.current.addNote(note, "blue");
+      setShowQuizModal(false);
+      triggerCelebration(isArabic ? "تم نقل القاعدة إلى السبورة السحرية! 📌" : "Grammar pinned to board! 📌");
+    }
+  };
+
+  const formatTimerDigits = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   return (
-    <div style={{ display: "flex", height: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", overflow: "hidden", backgroundColor: "#0f172a" }}>
-      {/* القائمة الجانبية: اختيار الوكيل والمحادثة */}
-      <aside
-        style={{
-          width: "420px",
-          minWidth: "360px",
-          backgroundColor: "#111827",
-          borderRight: "1px solid #1f2937",
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          zIndex: 10,
-        }}
-      >
-        {/* رأس الشريط الجانبي */}
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid #1f2937", backgroundColor: "#131d2e" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-            <h1 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#f9fafb" }}>
-              🎓 AI Tutor Platform
-            </h1>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span
-                style={{
-                  width: "8px",
-                  height: "8px",
-                  borderRadius: "50%",
-                  backgroundColor: isConnected ? "#10b981" : "#ef4444",
-                  boxShadow: isConnected ? "0 0 8px #10b981" : "none",
-                }}
-              />
-              <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>
-                {isConnected ? "Connected" : "Connecting..."}
+    <div className="playful-app-wrapper" dir={isArabic ? "rtl" : "ltr"}>
+      {/* Toast Notification */}
+      {celebrationToast && (
+        <div className="celebration-toast">
+          <span>✨</span>
+          <span>{celebrationToast}</span>
+        </div>
+      )}
+
+      {/* Floating Particles Celebration */}
+      {particles.length > 0 && (
+        <div className="celebration-overlay">
+          {particles.map((p) => (
+            <div
+              key={p.id}
+              className="celebration-particle"
+              style={{ left: `${p.x}%`, top: `${p.y}%` }}
+            >
+              {p.emoji}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Track 5: Active Simulation Live HUD Bar */}
+      {activeSimulation && (
+        <div className="simulation-hud-bar">
+          <div className="sim-hud-left">
+            <span className="sim-hud-icon">{activeSimulation.icon}</span>
+            <div className="sim-hud-title-box">
+              <span className="sim-hud-title">
+                {isArabic ? activeSimulation.titleAr : activeSimulation.titleEn}
+              </span>
+              <span className="sim-hud-stage-name">
+                {isArabic
+                  ? `المرحلة ${currentStageIndex + 1} من ${activeSimulation.stages.length}: ${activeSimulation.stages[currentStageIndex].stageTitleAr}`
+                  : `Stage ${currentStageIndex + 1} of ${activeSimulation.stages.length}: ${activeSimulation.stages[currentStageIndex].stageTitleEn}`}
               </span>
             </div>
           </div>
-          <p style={{ margin: 0, fontSize: "0.78rem", color: "#94a3b8" }}>
-            Active Coach: <strong style={{ color: "#60a5fa" }}>{currentAgent.name}</strong> ({currentAgent.role})
-          </p>
-        </div>
 
-        {/* قائمة اختيار المعلم / الوكيل */}
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid #1f2937", backgroundColor: "#0f172a" }}>
-          <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", marginBottom: "8px", letterSpacing: "0.05em" }}>
-            Select AI Tutor Specialist:
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            {AGENTS.map((agent) => {
-              const isSelected = agent.id === selectedAgent;
-              return (
-                <button
-                  key={agent.id}
-                  onClick={() => switchAgent(agent.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    border: isSelected ? "1px solid #3b82f6" : "1px solid #1f2937",
-                    backgroundColor: isSelected ? "#1e3a8a" : "#1e293b",
-                    color: isSelected ? "#ffffff" : "#cbd5e1",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "all 0.15s ease",
-                  }}
-                >
-                  <span style={{ fontSize: "1.2rem" }}>{agent.avatar}</span>
-                  <div style={{ overflow: "hidden" }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 600, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
-                      {agent.name}
-                    </div>
-                    <div style={{ fontSize: "0.68rem", color: isSelected ? "#93c5fd" : "#94a3b8", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
-                      {agent.role}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* سجل المحادثة */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "16px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-          }}
-        >
-          {messages.length === 0 && (
-            <div
-              style={{
-                margin: "auto 0",
-                textAlign: "center",
-                padding: "24px 16px",
-                border: "1px dashed #374151",
-                borderRadius: "12px",
-                color: "#9ca3af",
-              }}
-            >
-              <div style={{ fontSize: "2rem", marginBottom: "8px" }}>{currentAgent.avatar}</div>
-              <h3 style={{ margin: "0 0 6px 0", fontSize: "0.95rem", color: "#f3f4f6" }}>
-                Session with {currentAgent.name}
-              </h3>
-              <p style={{ margin: 0, fontSize: "0.78rem", lineHeight: 1.5 }}>
-                Write your sentence, ask a question, or practice speaking. {currentAgent.name} will explain concepts and update the whiteboard canvas in real-time!
-              </p>
-            </div>
-          )}
-
-          {messages.map((msg, index) => {
-            const isUser = msg.sender === "user";
-            return (
-              <div
-                key={index}
-                style={{
-                  alignSelf: isUser ? "flex-end" : "flex-start",
-                  maxWidth: "88%",
-                  padding: "10px 14px",
-                  borderRadius: "10px",
-                  backgroundColor: isUser ? "#2563eb" : "#1f2937",
-                  color: isUser ? "#ffffff" : "#f3f4f6",
-                  fontSize: "0.86rem",
-                  lineHeight: 1.5,
-                  wordBreak: "break-word",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
-                }}
+          <div className="sim-hud-center">
+            <div className="sim-timer-capsule">
+              <span className="timer-icon">⏱️</span>
+              <span className={`timer-digits ${secondsRemaining < 20 ? "urgent" : ""}`}>
+                {formatTimerDigits(secondsRemaining)}
+              </span>
+              <button
+                onClick={() => setIsTimerRunning(!isTimerRunning)}
+                style={{ background: "none", border: "none", color: "#ffffff", cursor: "pointer", fontSize: "14px" }}
+                title="Play/Pause Timer"
               >
-                <div
-                  style={{
-                    fontSize: "0.68rem",
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    marginBottom: "4px",
-                    color: isUser ? "#bfdbfe" : "#93c5fd",
-                  }}
-                >
-                  {isUser ? "You" : currentAgent.name}
-                </div>
-                <div style={{ whiteSpace: "pre-wrap" }}>{msg.text}</div>
-              </div>
-            );
-          })}
-
-          {isTyping && (
-            <div
-              style={{
-                alignSelf: "flex-start",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                backgroundColor: "#1f2937",
-                color: "#93c5fd",
-                fontSize: "0.78rem",
-              }}
-            >
-              🤖 {currentAgent.name} is thinking & writing on board...
+                {isTimerRunning ? "⏸️" : "▶️"}
+              </button>
             </div>
-          )}
+          </div>
 
-          <div ref={chatBottomRef} />
-        </div>
-
-        {/* حقل إدخال الرسالة */}
-        <div style={{ padding: "14px 16px", borderTop: "1px solid #1f2937", backgroundColor: "#111827" }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <input
-              type="text"
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={`Message ${currentAgent.name}...`}
-              style={{
-                flex: 1,
-                padding: "10px 14px",
-                borderRadius: "8px",
-                border: "1px solid #374151",
-                backgroundColor: "#1f2937",
-                color: "#f9fafb",
-                fontSize: "0.85rem",
-                outline: "none",
-              }}
-            />
+          <div className="sim-hud-right">
             <button
-              onClick={handleSend}
-              disabled={!inputVal.trim()}
-              style={{
-                padding: "0 18px",
-                borderRadius: "8px",
-                border: "none",
-                backgroundColor: inputVal.trim() ? "#2563eb" : "#374151",
-                color: "#ffffff",
-                fontWeight: 600,
-                fontSize: "0.85rem",
-                cursor: inputVal.trim() ? "pointer" : "not-allowed",
-                transition: "background-color 0.15s ease",
-              }}
+              onClick={handleNextSimulationStage}
+              className="sim-stage-next-btn"
             >
-              Send
+              {currentStageIndex + 1 < activeSimulation.stages.length
+                ? isArabic ? "المرحلة التالية ➡️" : "Next Stage ➡️"
+                : isArabic ? "إنهاء وتقييم 🏅" : "Finish & Score 🏅"}
+            </button>
+            <button
+              onClick={handleExitSimulation}
+              className="sim-exit-btn"
+            >
+              {isArabic ? "خروج" : "Exit"}
             </button>
           </div>
         </div>
-      </aside>
+      )}
 
-      {/* لوحة الرسم / السبورة التفاعلية */}
-      <main style={{ flex: 1, height: "100%", position: "relative", backgroundColor: "#ffffff" }}>
-        <Whiteboard socket={socket} />
-      </main>
+      {/* Track 5: Simulation Studio Modal */}
+      {showSimulationStudioModal && (
+        <div className="playful-modal-backdrop" onClick={() => setShowSimulationStudioModal(false)}>
+          <div className="playful-modal-card" style={{ maxWidth: "640px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "24px" }}>🎭</span>
+                <span className="modal-header-title">
+                  {isArabic ? "استوديو المحاكاة والمقابلات التفاعلية" : "Interactive Simulation Studio"}
+                </span>
+              </div>
+              <button onClick={() => setShowSimulationStudioModal(false)} className="modal-close-btn">
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              <p style={{ fontSize: "0.82rem", color: "#64748b", margin: 0 }}>
+                {isArabic
+                  ? "اختر بيئة المحاكاة لتجربة اختبار حقيقي أو مقابلة عمل رسمية بمؤقت وتقييم تفصيلي:"
+                  : "Select a simulation pack to practice real-world job interviews, official IELTS tests, or daily situations:"}
+              </p>
+
+              <div className="sim-packs-grid">
+                {SIMULATION_PACKS.map((pack) => (
+                  <div
+                    key={pack.id}
+                    onClick={() => handleStartSimulation(pack)}
+                    className="sim-pack-choice-card"
+                  >
+                    <div className="sim-pack-card-left">
+                      <div className="sim-pack-icon-bubble">{pack.icon}</div>
+                      <div className="sim-pack-text-box">
+                        <span className="sim-pack-title">
+                          {isArabic ? pack.titleAr : pack.titleEn}
+                        </span>
+                        <p className="sim-pack-subtitle">
+                          {isArabic ? pack.subtitleAr : pack.subtitleEn}
+                        </p>
+                        <div className="sim-pack-criteria-strip">
+                          {pack.criteriaList.map((c, i) => (
+                            <span key={i} className="sim-criteria-chip">
+                              {isArabic ? c.nameAr : c.nameEn}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button className="sim-start-cta-btn">
+                      {isArabic ? "ابدأ المحاكاة 🚀" : "Start 🚀"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Track 5: Official Simulation Scorecard Modal */}
+      {showScorecardModal && scorecardResults && (
+        <div className="playful-modal-backdrop" onClick={() => setShowScorecardModal(false)}>
+          <div className="playful-modal-card" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "24px" }}>🏆</span>
+                <span className="modal-header-title">
+                  {isArabic ? "بطاقة تقييم المحاكاة الرسمية" : "Official Simulation Scorecard"}
+                </span>
+              </div>
+              <button onClick={() => setShowScorecardModal(false)} className="modal-close-btn">
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              <div className="sim-scorecard-box">
+                <div className="scorecard-banner-row">
+                  <div>
+                    <span style={{ fontSize: "1.1rem", fontWeight: 900, color: "#1e293b", display: "block" }}>
+                      {isArabic ? scorecardResults.pack.titleAr : scorecardResults.pack.titleEn}
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                      {isArabic ? "التقييم الشامل وفق معايير الجلسة" : "Comprehensive criteria evaluation"}
+                    </span>
+                  </div>
+                  <div className="scorecard-final-grade">
+                    {scorecardResults.finalGrade}
+                  </div>
+                </div>
+
+                <div className="scorecard-rubric-table">
+                  {scorecardResults.criteriaScores.map((c: any, i: number) => (
+                    <div key={i} className="rubric-row-item">
+                      <span className="rubric-name">{isArabic ? c.nameAr : c.nameEn} ({c.weight})</span>
+                      <span className="rubric-score-badge">{c.score}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ background: "#ecfdf5", border: "1.5px solid #86efac", borderRadius: "12px", padding: "10px 14px", fontSize: "0.82rem", color: "#166534", fontWeight: 700 }}>
+                  🎉 {isArabic ? "أداء استثنائي! تمت إضافة +100 XP إلى رصيدك التعليمي!" : "Outstanding performance! +100 XP added to your progress!"}
+                </div>
+              </div>
+            </div>
+
+            <div className="quiz-modal-footer">
+              <button
+                onClick={() => {
+                  setShowScorecardModal(false);
+                  handleDownloadBoard();
+                }}
+                className="quiz-btn-pin-board"
+              >
+                <span>📸</span>
+                <span>{isArabic ? "حفظ السبورة والدرجات" : "Save Board & Grade"}</span>
+              </button>
+              <button
+                onClick={() => setShowScorecardModal(false)}
+                className="quiz-btn-next"
+              >
+                <span>{isArabic ? "متابعة التعلم ✨" : "Continue ✨"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Badges Modal (Track 2) */}
+      {showBadgesModal && (
+        <div className="playful-modal-backdrop" onClick={() => setShowBadgesModal(false)}>
+          <div className="playful-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <h2 className="modal-header-title">
+                <span>🏆</span>
+                <span>{isArabic ? "أوسمة وشارات الإنجاز" : "Badges & Achievements"}</span>
+              </h2>
+              <button
+                onClick={() => setShowBadgesModal(false)}
+                className="modal-close-btn"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "#f8fafc", borderRadius: "14px", border: "1.5px solid #e2e8f0" }}>
+                <div>
+                  <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#1e293b", display: "block" }}>
+                    {isArabic ? levelData.titleAr : levelData.titleEn}
+                  </span>
+                  <span style={{ fontSize: "0.74rem", color: "#64748b" }}>
+                    {isArabic ? `المستوى ${levelData.level} • مجموع النقاط: ${xp} XP` : `Level ${levelData.level} • Total: ${xp} XP`}
+                  </span>
+                </div>
+                <span className="streak-pill">
+                  <span>🔥</span>
+                  <span>{isArabic ? `${streak} أيام تدريب` : `${streak}-day Streak`}</span>
+                </span>
+              </div>
+
+              <div className="achievements-grid">
+                {ACHIEVEMENTS.map((badge) => {
+                  const isUnlocked = unlockedBadges.includes(badge.id);
+                  return (
+                    <div
+                      key={badge.id}
+                      className={`achievement-card ${isUnlocked ? "unlocked" : "locked"}`}
+                    >
+                      <div className="badge-top-row">
+                        <div className="badge-icon-box">{isUnlocked ? badge.icon : "🔒"}</div>
+                        <span className={`badge-status-pill ${isUnlocked ? "unlocked" : "locked"}`}>
+                          {isUnlocked
+                            ? isArabic ? "مكتمل ⭐" : "Unlocked ⭐"
+                            : isArabic ? "مغلق" : "Locked"}
+                        </span>
+                      </div>
+                      <span className="badge-title-text">
+                        {isArabic ? badge.titleAr : badge.titleEn}
+                      </span>
+                      <p className="badge-desc-text">
+                        {isArabic ? badge.descAr : badge.descEn}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Speed Quiz Modal (Track 2) */}
+      {showQuizModal && activeQuiz && (
+        <div className="playful-modal-backdrop" onClick={() => setShowQuizModal(false)}>
+          <div className="playful-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "24px" }}>⚡</span>
+                <span className="modal-header-title">
+                  {isArabic ? "مختبر التحديات السريعة" : "Speed Quiz Lab"}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowQuizModal(false)}
+                className="modal-close-btn"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              <span className="quiz-topic-badge">
+                {isArabic ? activeQuiz.topicAr : activeQuiz.topicEn}
+              </span>
+
+              <h3 className="quiz-question-prompt">
+                {isArabic ? activeQuiz.questionAr : activeQuiz.questionEn}
+              </h3>
+
+              <div className="quiz-options-list">
+                {activeQuiz.options.map((option, idx) => {
+                  let statusClass = "";
+                  if (quizAnswered) {
+                    if (option.isCorrect) statusClass = "correct";
+                    else if (quizSelectedOption === idx) statusClass = "wrong";
+                  }
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleSelectQuizOption(idx)}
+                      disabled={quizAnswered}
+                      className={`quiz-option-button ${statusClass}`}
+                    >
+                      <span>{option.text}</span>
+                      {quizAnswered && option.isCorrect && <span>✅</span>}
+                      {quizAnswered && quizSelectedOption === idx && !option.isCorrect && <span>❌</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {quizAnswered && quizSelectedOption !== null && (
+                <div
+                  className={`quiz-feedback-box ${activeQuiz.options[quizSelectedOption].isCorrect ? "correct" : "wrong"}`}
+                >
+                  <div style={{ fontWeight: 800, marginBottom: "4px" }}>
+                    {activeQuiz.options[quizSelectedOption].isCorrect
+                      ? isArabic ? "🎉 إجابة ممتازة! (+50 XP)" : "🎉 Brilliant Answer! (+50 XP)"
+                      : isArabic ? "💡 توضيح المعلم:" : "💡 Tutor Explanation:"}
+                  </div>
+                  <div>
+                    {isArabic
+                      ? activeQuiz.options[quizSelectedOption].explanationAr
+                      : activeQuiz.options[quizSelectedOption].explanationEn}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="quiz-modal-footer">
+              <button
+                onClick={handlePinQuizToBoard}
+                className="quiz-btn-pin-board"
+                title="Pin this rule to the Magic Board"
+              >
+                <span>📌</span>
+                <span>{isArabic ? "تثبيت القاعدة على السبورة" : "Pin Rule to Board"}</span>
+              </button>
+
+              <button
+                onClick={openSpeedQuiz}
+                className="quiz-btn-next"
+              >
+                <span>{isArabic ? "سؤال آخر ➡️" : "Next Quiz ➡️"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Educational Templates Modal (Track 3) */}
+      {showTemplatesModal && (
+        <div className="playful-modal-backdrop" onClick={() => setShowTemplatesModal(false)}>
+          <div className="playful-modal-card" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "24px" }}>📋</span>
+                <span className="modal-header-title">
+                  {isArabic ? "قوالب السبورة التعليمية الجاهزة" : "Magic Board Educational Templates"}
+                </span>
+              </div>
+              <button onClick={() => setShowTemplatesModal(false)} className="modal-close-btn">
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              <p style={{ fontSize: "0.82rem", color: "#64748b", margin: 0 }}>
+                {isArabic
+                  ? "اختر قالباً تعليمياً لإدراجه فورياً على السبورة السحرية، مصمم لمساعدتك على تنظيم الأفكار والقواعد:"
+                  : "Select an educational blueprint to insert onto the Magic Board, formatted for structured practice:"}
+              </p>
+
+              <div className="templates-selection-grid">
+                {EDUCATIONAL_TEMPLATES.map((tmpl) => (
+                  <div
+                    key={tmpl.id}
+                    onClick={() => handleInsertTemplate(tmpl)}
+                    className="template-card-item"
+                  >
+                    <div className="template-card-header">
+                      <span className="template-card-icon">{tmpl.icon}</span>
+                      <span className="template-card-name">
+                        {isArabic ? tmpl.nameAr : tmpl.nameEn}
+                      </span>
+                    </div>
+                    <p className="template-card-desc">
+                      {isArabic ? tmpl.descAr : tmpl.descEn}
+                    </p>
+                    <span className="template-card-preview-tag">
+                      {isArabic ? "إدراج بلمسة واحدة 🪄" : "1-Click Insert 🪄"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lesson Report Card Modal (Track 4) */}
+      {showReportModal && currentReport && (
+        <div className="playful-modal-backdrop" onClick={() => setShowReportModal(false)}>
+          <div className="playful-modal-card" style={{ maxWidth: "580px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "24px" }}>📊</span>
+                <span className="modal-header-title">
+                  {isArabic ? "بطاقة تقرير نهاية الدرس" : "Lesson Evaluation Report"}
+                </span>
+              </div>
+              <button onClick={() => setShowReportModal(false)} className="modal-close-btn">
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              <div className="report-card-container">
+                <div className="report-header-banner">
+                  <div className="report-tutor-lockup">
+                    <div className="report-tutor-avatar">{currentReport.agentAvatar}</div>
+                    <div>
+                      <span className="report-title-text">
+                        {isArabic ? `جلسة مع ${currentReport.agentName}` : `Session with ${currentReport.agentName}`}
+                      </span>
+                      <span className="report-date-text">{currentReport.dateFormatted}</span>
+                    </div>
+                  </div>
+                  <div className="report-score-stars">
+                    {"⭐".repeat(currentReport.stars)}
+                  </div>
+                </div>
+
+                <div className="report-stats-strip">
+                  <div className="report-stat-box">
+                    <span className="stat-box-val">{currentReport.messagesCount}</span>
+                    <span className="stat-box-label">{isArabic ? "تبادل رسائل" : "Messages"}</span>
+                  </div>
+                  <div className="report-stat-box">
+                    <span className="stat-box-val">+{currentReport.xpEarned}</span>
+                    <span className="stat-box-label">{isArabic ? "نقاط XP" : "XP Earned"}</span>
+                  </div>
+                  <div className="report-stat-box">
+                    <span className="stat-box-val">{currentReport.vocabLearned.length}</span>
+                    <span className="stat-box-label">{isArabic ? "مفردات مكتسبة" : "Key Vocab"}</span>
+                  </div>
+                </div>
+
+                {/* Key Vocab */}
+                <div className="report-section-card">
+                  <span className="report-section-heading">
+                    <span>💡</span>
+                    <span>{isArabic ? "أبرز المفردات والتراكيب المكتسبة:" : "Key Vocabulary Acquired:"}</span>
+                  </span>
+                  <div className="report-vocab-chips">
+                    {currentReport.vocabLearned.map((v, i) => (
+                      <span key={i} className="report-vocab-chip">
+                        {v}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tutor Advice */}
+                <div className="report-advice-box">
+                  <div style={{ fontWeight: 800, marginBottom: "4px" }}>
+                    {isArabic ? `💬 توصية ${currentReport.agentName} للجلسة القادمة:` : `💬 ${currentReport.agentName}'s Recommendation:`}
+                  </div>
+                  <div>{currentReport.tutorAdvice}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="quiz-modal-footer">
+              <button
+                onClick={handleDownloadBoard}
+                className="quiz-btn-pin-board"
+                title="Download canvas screenshot"
+              >
+                <span>📸</span>
+                <span>{isArabic ? "تحميل صورة السبورة" : "Download Board PNG"}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  window.print();
+                }}
+                className="quiz-btn-next"
+              >
+                <span>🖨️</span>
+                <span>{isArabic ? "طباعة التقرير" : "Print Report"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sessions History Archive Modal (Track 4) */}
+      {showArchiveModal && (
+        <div className="playful-modal-backdrop" onClick={() => setShowArchiveModal(false)}>
+          <div className="playful-modal-card" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-comic-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "24px" }}>🗂️</span>
+                <span className="modal-header-title">
+                  {isArabic ? "أرشيف الجلسات والدروس السابقة" : "Saved Sessions Archive"}
+                </span>
+              </div>
+              <button onClick={() => setShowArchiveModal(false)} className="modal-close-btn">
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-comic-body">
+              {savedSessionsList.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px 10px", color: "#64748b" }}>
+                  <div style={{ fontSize: "36px", marginBottom: "8px" }}>📚</div>
+                  <h4 style={{ margin: 0, fontWeight: 800, color: "#1e293b" }}>
+                    {isArabic ? "لا توجد جلسات محفوظة بعد" : "No saved sessions yet"}
+                  </h4>
+                  <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>
+                    {isArabic
+                      ? "اضغط على 'إنهاء الجلسة واستخراج التقرير' لحفظ ملخصات دروسك تلقائياً هنا."
+                      : "Click 'End Session & Report' during a lesson to save summaries here."}
+                  </p>
+                </div>
+              ) : (
+                <div className="session-archive-list">
+                  {savedSessionsList.map((session) => (
+                    <div key={session.id} className="session-archive-card">
+                      <div className="archive-card-left">
+                        <div className="archive-avatar-icon">{session.agentAvatar}</div>
+                        <div>
+                          <span className="archive-title">
+                            {session.agentName} ({session.agentRole})
+                          </span>
+                          <div className="archive-meta">
+                            <span>{session.dateFormatted}</span> • <span>{session.messagesCount} رسائل</span> • <span>{"⭐".repeat(session.stars)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="archive-card-actions">
+                        <button
+                          onClick={() => {
+                            setCurrentReport(session);
+                            setShowArchiveModal(false);
+                            setShowReportModal(true);
+                          }}
+                          className="archive-action-btn"
+                        >
+                          {isArabic ? "عرض التقرير 📄" : "View Report 📄"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const updated = deleteSavedSession(session.id);
+                            setSavedSessionsList(updated);
+                          }}
+                          className="archive-delete-btn"
+                          title="Delete Session"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Navbar */}
+      <header className="playful-navbar">
+        <div className="brand-badge-group">
+          <div className="brand-icon-bubble">🎓</div>
+          <div className="brand-text-container">
+            <h1 className="brand-main-title">
+              {isArabic ? "أكاديمية المعلمين الأذكياء" : "The Dream Tutors"}
+              <span style={{ fontSize: "1rem" }}>✨</span>
+            </h1>
+            <span className="brand-subtitle-text">
+              {isArabic
+                ? "منصة تفاعلية مدعومة بالذكاء الاصطناعي الصوتي ومحاكي المقابلات"
+                : "Multimodal Voice, Whiteboard & Simulation Studio"}
+            </span>
+          </div>
+        </div>
+
+        {/* Gamification Strip & Simulation Studio CTA */}
+        <div className="navbar-gamification-strip">
+          <div className="level-xp-capsule" title={`${levelData.currentLevelXp} / ${levelData.nextLevelXp} XP to next level`}>
+            <span className="level-badge-tag">
+              Lv. {levelData.level}
+            </span>
+            <div className="xp-progress-track">
+              <div
+                className="xp-progress-fill"
+                style={{ width: `${levelData.progressPercent}%` }}
+              />
+            </div>
+            <span className="xp-text-label">{xp} XP</span>
+          </div>
+
+          <div className="streak-pill" title="Daily Practice Streak">
+            <span>🔥</span>
+            <span>{streak}</span>
+          </div>
+
+          <button
+            onClick={() => setShowBadgesModal(true)}
+            className="badges-nav-btn"
+            title="View Achievements"
+          >
+            <span>🏆</span>
+            <span>{isArabic ? "الأوسمة" : "Badges"}</span>
+          </button>
+
+          {/* Track 5: Simulation Studio Nav Button */}
+          <button
+            onClick={() => setShowSimulationStudioModal(true)}
+            className="badges-nav-btn"
+            style={{ background: "linear-gradient(135deg, #c7d2fe 0%, #a5b4fc 100%)", borderColor: "#6366f1", color: "#312e81" }}
+            title="Launch Simulation Studio (Job Interview / IELTS / Scenarios)"
+          >
+            <span>🎭</span>
+            <span>{isArabic ? "المحاكاة" : "Simulate"}</span>
+          </button>
+
+          {/* Sessions Archive Nav Button */}
+          <button
+            onClick={() => {
+              setSavedSessionsList(getSavedSessions());
+              setShowArchiveModal(true);
+            }}
+            className="lang-toggle-btn"
+            style={{ padding: "5px 12px" }}
+            title="Session Archive"
+          >
+            <span>🗂️</span>
+            <span>{isArabic ? "الأرشيف" : "History"}</span>
+          </button>
+        </div>
+
+        <div className="nav-actions-group">
+          <div className={`status-chip ${isConnected ? "connected" : "disconnected"}`}>
+            <span>{isConnected ? "🟢" : "🔴"}</span>
+            <span>
+              {isConnected
+                ? isArabic ? "متصل" : "Connected"
+                : isArabic ? "جاري الاتصال..." : "Connecting..."}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setLang(isArabic ? "en" : "ar")}
+            className="lang-toggle-btn"
+            title="Switch Language"
+          >
+            <span>{isArabic ? "🇬🇧 English" : "🇸🇦 العربية"}</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Workspace Split Layout */}
+      <div className="playful-workspace">
+        {/* Left/Right Sidebar: Tutors & Speech Chat */}
+        <aside className="tutors-chat-sidebar">
+          {/* Character Cards */}
+          <div className="sidebar-tutors-header">
+            <div className="tutors-section-title">
+              <span>{isArabic ? "فريق المعلمين (The Dream Tutors)" : "The Dream Tutors"}</span>
+              <span className="tutors-count-badge">6 Specialists</span>
+            </div>
+
+            <div className="character-cards-grid">
+              {AGENTS.map((agent) => {
+                const isSelected = agent.id === selectedAgent;
+                const isPlayingVoice = playingVoiceAgentId === agent.id;
+                return (
+                  <div
+                    key={agent.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => switchAgent(agent.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        switchAgent(agent.id);
+                      }
+                    }}
+                    className={`character-card ${agent.colorClass} ${isSelected ? "active" : ""} ${isPlayingVoice ? "speaking-card" : ""}`}
+                    title={isArabic ? `${agent.nameAr} - ${agent.roleAr} (${agent.genderLabelAr})` : `${agent.nameEn} - ${agent.roleEn} (${agent.genderLabelEn})`}
+                  >
+                    {isSelected && <span className="active-star-pin">⭐</span>}
+                    <div className="card-avatar-wrapper">
+                      {agent.avatar}
+                      {isPlayingVoice && (
+                        <span className="card-speaking-wave">🔊</span>
+                      )}
+                    </div>
+                    <span className="card-name-label">{isArabic ? agent.nameAr : agent.nameEn}</span>
+                    <span className="card-role-label">
+                      {isArabic ? agent.roleAr.split("&")[0].split("و")[0] : agent.roleEn.split("&")[0]}
+                    </span>
+                    <span className={`card-gender-pill ${agent.gender}`}>
+                      {agent.gender === "male" ? (isArabic ? "👨 رجل" : "👨 Male") : (isArabic ? "👩 أنثى" : "👩 Female")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        previewAgentVoice(agent.id);
+                      }}
+                      className={`card-voice-test-btn ${isPlayingVoice ? "playing" : ""}`}
+                      title={isArabic ? `استمع لصوت ${agent.nameAr} (${agent.geminiVoice})` : `Preview ${agent.nameEn}'s voice (${agent.geminiVoice})`}
+                    >
+                      {isPlayingVoice ? (isArabic ? "🔊 يتحدث..." : "🔊 Speaking...") : `🎙️ ${agent.geminiVoice}`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Active Coach Banner */}
+          <div className="active-tutor-banner">
+            <div className="active-tutor-info">
+              <div className={`active-tutor-avatar ${playingVoiceAgentId === currentAgent.id ? "speaking-avatar-pulse" : ""}`}>
+                {currentAgent.avatar}
+              </div>
+              <div className="active-tutor-text">
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <span className="active-tutor-name">
+                    {isArabic ? currentAgent.nameAr : currentAgent.nameEn}
+                  </span>
+                  <span className={`gender-badge ${currentAgent.gender}`}>
+                    {currentAgent.gender === "male" ? (isArabic ? "👨 شخصية رجل" : "👨 Male") : (isArabic ? "👩 شخصية نسائية" : "👩 Female")}
+                  </span>
+                </div>
+                <span className="active-tutor-voice-badge">
+                  {isArabic ? currentAgent.personaAr : currentAgent.personaEn}
+                </span>
+                <span className="voice-system-indicator">
+                  🎙️ {isArabic ? "صوت الذكاء الاصطناعي:" : "Voice:"} <strong>{currentAgent.geminiVoice}</strong>
+                  {assignedVoices[currentAgent.id] ? ` • ${assignedVoices[currentAgent.id]?.name}` : ""}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <button
+                onClick={() => previewAgentVoice(selectedAgent)}
+                className={`bubble-tool-btn ${playingVoiceAgentId === selectedAgent ? "active" : ""}`}
+                title={isArabic ? `استمع لنبرة صوت ${currentAgent.nameAr}` : `Preview ${currentAgent.nameEn}'s unique voice`}
+                style={{ background: "#ede9fe", borderColor: "#a78bfa", color: "#5b21b6", fontWeight: 800 }}
+              >
+                <span>🔊</span>
+                <span style={{ fontSize: "0.68rem" }}>{isArabic ? "تجربة الصوت" : "Test Voice"}</span>
+              </button>
+
+              <button
+                onClick={() => setVoiceAutoSpeak(!voiceAutoSpeak)}
+                className={`bubble-tool-btn ${voiceAutoSpeak ? "active" : ""}`}
+                title={isArabic ? "تفعيل/تعطيل الرد الصوتي التلقائي" : "Toggle Auto-Voice Output"}
+                style={{ background: voiceAutoSpeak ? "#ede9fe" : "#ffffff", borderColor: voiceAutoSpeak ? "#8b5cf6" : "#cbd5e1" }}
+              >
+                <span>{voiceAutoSpeak ? "🔊" : "🔇"}</span>
+                <span style={{ fontSize: "0.68rem" }}>{voiceAutoSpeak ? (isArabic ? "صوت: مفعّل" : "Voice: ON") : (isArabic ? "صوت: صامت" : "Voice: Muted")}</span>
+              </button>
+
+              <button
+                onClick={handleEndSessionAndReport}
+                className="bubble-tool-btn"
+                style={{ background: "#ecfdf5", borderColor: "#86efac", color: "#166534" }}
+                title="End session and generate evaluation report"
+              >
+                <span>📊</span>
+                <span style={{ fontSize: "0.68rem" }}>{isArabic ? "إنهاء وتقرير" : "Report"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Track 5: Active Simulation Cue Card Banner */}
+          {activeSimulation && activeSimulation.stages[currentStageIndex]?.cueCardPoints && (
+            <div className="sim-cue-card-banner">
+              <div className="cue-card-title">
+                <span>📋</span>
+                <span>{isArabic ? "نقاط الإجابة الموصى بها (Cue Card):" : "Recommended Points to Cover:"}</span>
+              </div>
+              <ul className="cue-card-points-list">
+                {activeSimulation.stages[currentStageIndex].cueCardPoints!.map((pt, i) => (
+                  <li key={i}>{pt}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Live Voice Active Bar */}
+          {(isListening || isTutorSpeaking) && (
+            <div className="voice-live-banner">
+              <div className="voice-live-status">
+                <div className="voice-wave-visualizer">
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                  <span className="wave-bar" />
+                </div>
+                <span>
+                  {isListening
+                    ? isArabic ? "الميكروفون يستمع لنطقك الآن..." : "Microphone is listening to you..."
+                    : isArabic ? `${currentAgent.nameAr} يتحدث الآن بصوت طبيعي...` : `${currentAgent.nameEn} is speaking aloud...`}
+                </span>
+              </div>
+
+              <button
+                onClick={() => {
+                  if (isListening && recognitionRef.current) recognitionRef.current.stop();
+                  if (isTutorSpeaking) window.speechSynthesis.cancel();
+                  setIsListening(false);
+                  setIsTutorSpeaking(false);
+                }}
+                className="voice-stop-btn"
+              >
+                ⏹️ {isArabic ? "إيقاف" : "Stop"}
+              </button>
+            </div>
+          )}
+
+          {/* Speech Bubble Chat Stream */}
+          <div className="chat-conversation-stream">
+            {messages.length === 0 && (
+              <div className="chat-empty-state">
+                <div className="empty-avatar-icon">{currentAgent.avatar}</div>
+                <h3 className="empty-state-title">
+                  {isArabic
+                    ? `مرحباً بك مع ${currentAgent.nameAr}!`
+                    : `Welcome to ${currentAgent.nameEn}'s Studio!`}
+                </h3>
+                <p className="empty-state-desc">
+                  {isArabic ? currentAgent.quoteAr : currentAgent.quoteEn}
+                </p>
+                <div style={{ marginTop: "12px", display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+                  <button
+                    onClick={() => setShowSimulationStudioModal(true)}
+                    className="bubble-tool-btn"
+                    style={{ background: "#ede9fe", borderColor: "#a5b4fc", color: "#3730a3" }}
+                  >
+                    <span>🎭</span>
+                    <span>{isArabic ? "محاكي المقابلات والآيلتس" : "Simulation Studio"}</span>
+                  </button>
+                  <button
+                    onClick={openSpeedQuiz}
+                    className="bubble-tool-btn"
+                    style={{ background: "#fef08a", borderColor: "#eab308", color: "#854d0e" }}
+                  >
+                    <span>⚡</span>
+                    <span>{isArabic ? "تحدي كرتوني سريع" : "Speed Challenge"}</span>
+                  </button>
+                  <button
+                    onClick={() => setShowTemplatesModal(true)}
+                    className="bubble-tool-btn"
+                    style={{ background: "#e0e7ff", borderColor: "#818cf8", color: "#3730a3" }}
+                  >
+                    <span>📋</span>
+                    <span>{isArabic ? "قوالب تعليمية" : "Templates"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {messages.map((msg) => {
+              const isUser = msg.sender === "user";
+              return (
+                <div key={msg.id} className={`speech-bubble-container ${isUser ? "user" : "agent"}`}>
+                  <div className="speech-sender-header">
+                    <span className="sender-name-tag">
+                      {isUser
+                        ? isArabic ? "🧑 الطالب" : "🧑 Student"
+                        : `🤖 ${msg.agentName || (isArabic ? currentAgent.nameAr : currentAgent.nameEn)}`}
+                    </span>
+                    <span className="message-timestamp">{msg.timestamp}</span>
+                  </div>
+
+                  <div className="speech-bubble-body">
+                    {msg.imageBase64 && (
+                      <div className="snapshot-preview-box">
+                        <img
+                          src={msg.imageBase64}
+                          alt="Whiteboard snapshot"
+                          className="snapshot-preview-img"
+                        />
+                      </div>
+                    )}
+                    <div>{msg.text}</div>
+
+                    {!isUser && (
+                      <div className="bubble-tools-row">
+                        <button
+                          onClick={() => handleSpeak(msg.text)}
+                          className="bubble-tool-btn"
+                          title="Listen with custom tutor voice"
+                        >
+                          <span>🔊</span>
+                          <span>{isArabic ? "استماع" : "Listen"}</span>
+                        </button>
+                        <button
+                          onClick={() => handlePinFeedbackToCanvas(msg.text)}
+                          className="bubble-tool-btn"
+                          title="Pin this advice to the Magic Board"
+                        >
+                          <span>📌</span>
+                          <span>{isArabic ? "تثبيت على السبورة" : "Pin to Board"}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {isTyping && (
+              <div className="tutor-thinking-doodle">
+                <span className="thinking-pencil-icon">✏️</span>
+                <span className="thinking-text">
+                  {isArabic
+                    ? `${currentAgent.nameAr} يفكر ويكتب على السبورة...`
+                    : `${currentAgent.nameEn} is thinking & writing on board...`}
+                </span>
+                <div className="bouncing-dots">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            )}
+
+            <div ref={chatBottomRef} />
+          </div>
+
+          {/* Chat Input Area */}
+          <div className="playful-chat-input-panel">
+            <div className="quick-action-chips">
+              <button
+                onClick={() => handleSend(isArabic ? "يرجى فحص ومراجعة ملاحظاتي على السبورة وتصحيح الأخطاء." : "Please inspect my notes on the whiteboard and review for mistakes.")}
+                disabled={isTyping}
+                className="quick-chip-btn chip-inspect"
+                title="Inspect Whiteboard with AI Vision"
+              >
+                <span>🔍</span>
+                <span>{isArabic ? "فحص السبورة" : "Inspect Board"}</span>
+              </button>
+
+              <button
+                onClick={() => setShowSimulationStudioModal(true)}
+                className="quick-chip-btn"
+                style={{ background: "#ede9fe", borderColor: "#c4b5fd", color: "#5b21b6" }}
+                title="Open Simulation Studio"
+              >
+                <span>🎭</span>
+                <span>{isArabic ? "محاكاة" : "Simulate"}</span>
+              </button>
+
+              <button
+                onClick={openSpeedQuiz}
+                className="quick-chip-btn"
+                style={{ background: "#fffbeb", borderColor: "#fde68a", color: "#b45309" }}
+                title="Open Interactive Quiz"
+              >
+                <span>⚡</span>
+                <span>{isArabic ? "تحدي (+50 XP)" : "Quiz (+50 XP)"}</span>
+              </button>
+
+              <button
+                onClick={() => setShowTemplatesModal(true)}
+                className="quick-chip-btn"
+                style={{ background: "#e0e7ff", borderColor: "#a5b4fc", color: "#3730a3" }}
+                title="Choose Educational Template"
+              >
+                <span>📋</span>
+                <span>{isArabic ? "قوالب" : "Templates"}</span>
+              </button>
+
+              {messages.length > 0 && (
+                <button
+                  onClick={() => setMessages([])}
+                  className="quick-chip-btn"
+                  title="Clear Chat"
+                >
+                  <span>🧹</span>
+                  <span>{isArabic ? "محو" : "Clear"}</span>
+                </button>
+              )}
+            </div>
+
+            <div className="input-controls-row">
+              <button
+                onClick={toggleSpeechRecognition}
+                className={`voice-mic-btn ${isListening ? "listening" : ""}`}
+                title={isListening ? "Listening... click to stop" : "Speak via Microphone (Live Voice)"}
+                type="button"
+              >
+                {isListening ? "🔴" : "🎙️"}
+              </button>
+
+              <input
+                type="text"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isArabic
+                    ? `تحدث مع ${currentAgent.nameAr} أو اسأله عن السبورة...`
+                    : `Message ${currentAgent.nameEn} or ask about your board...`
+                }
+                className="playful-text-input"
+              />
+
+              <button
+                onClick={() => handleSend()}
+                disabled={!inputVal.trim() || isTyping}
+                className="playful-send-btn"
+                title="Send Message"
+                type="button"
+              >
+                🚀
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* Right/Left Main Stage: The Magic Board */}
+        <main className="magic-board-wrapper">
+          {/* Teacher Canvas Pointer Alert */}
+          {teacherPointerText && (
+            <div className="teacher-canvas-pointer">
+              <span className="pointer-avatar">{currentAgent.avatar}</span>
+              <span className="pointer-text">{teacherPointerText}</span>
+              <span>✨</span>
+            </div>
+          )}
+
+          {/* Top Board Toolbar */}
+          <div className="magic-board-toolbar" style={{ position: "relative" }}>
+            <div className="board-title-group">
+              <span className="board-title-badge">
+                🎨 {isArabic ? "السبورة السحرية (The Magic Board)" : "The Magic Board"}
+              </span>
+              <span className="board-coach-tag">
+                {isArabic ? `مع ${currentAgent.nameAr}` : `With ${currentAgent.nameEn}`}
+              </span>
+            </div>
+
+            <div className="board-actions-group">
+              {/* Simulation Studio shortcut (Track 5) */}
+              <button
+                onClick={() => setShowSimulationStudioModal(true)}
+                className="board-tool-action-btn"
+                style={{ background: "#ede9fe", borderColor: "#a5b4fc", color: "#3730a3" }}
+                title="Launch Simulation Studio"
+              >
+                <span>🎭</span>
+                <span>{isArabic ? "استوديو المحاكاة" : "Sim Studio"}</span>
+              </button>
+
+              {/* Templates Button */}
+              <button
+                onClick={() => setShowTemplatesModal(true)}
+                className="board-tool-action-btn"
+                style={{ background: "#ede9fe", borderColor: "#c4b5fd", color: "#5b21b6" }}
+                title="Open Educational Blueprints & Templates"
+              >
+                <span>📋</span>
+                <span>{isArabic ? "قوالب تعليمية" : "Templates"}</span>
+              </button>
+
+              {/* Sticky Note with Color Picker */}
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowColorPalette(!showColorPalette)}
+                  className="board-tool-action-btn tool-note"
+                  title="Choose sticky note color"
+                >
+                  <span>📝</span>
+                  <span>{isArabic ? "ملاحظة لاصقة" : "Add Note"}</span>
+                </button>
+
+                {showColorPalette && (
+                  <div className="color-palette-popover">
+                    <span
+                      onClick={() => {
+                        setSelectedStickyColor("yellow");
+                        setShowColorPalette(false);
+                        if (whiteboardRef.current) {
+                          whiteboardRef.current.addNote(isArabic ? "ملاحظة جديدة 📝" : "New Note 📝", "yellow");
+                          awardXp(15, "ملاحظة صفراء", "Yellow sticky note");
+                        }
+                      }}
+                      className="color-swatch-dot yellow"
+                      title="Yellow Note"
+                    />
+                    <span
+                      onClick={() => {
+                        setSelectedStickyColor("green");
+                        setShowColorPalette(false);
+                        if (whiteboardRef.current) {
+                          whiteboardRef.current.addNote(isArabic ? "نصيحة مميزة ✅" : "Tip Note ✅", "green");
+                          awardXp(15, "ملاحظة خضراء", "Green sticky note");
+                        }
+                      }}
+                      className="color-swatch-dot green"
+                      title="Green Note"
+                    />
+                    <span
+                      onClick={() => {
+                        setSelectedStickyColor("blue");
+                        setShowColorPalette(false);
+                        if (whiteboardRef.current) {
+                          whiteboardRef.current.addNote(isArabic ? "قاعدة هامة 💡" : "Rule Note 💡", "blue");
+                          awardXp(15, "ملاحظة زرقاء", "Blue sticky note");
+                        }
+                      }}
+                      className="color-swatch-dot blue"
+                      title="Blue Note"
+                    />
+                    <span
+                      onClick={() => {
+                        setSelectedStickyColor("violet");
+                        setShowColorPalette(false);
+                        if (whiteboardRef.current) {
+                          whiteboardRef.current.addNote(isArabic ? "مصطلح جديد 🔮" : "Idiom Note 🔮", "violet");
+                          awardXp(15, "ملاحظة بنفسجية", "Violet sticky note");
+                        }
+                      }}
+                      className="color-swatch-dot violet"
+                      title="Violet Note"
+                    />
+                    <span
+                      onClick={() => {
+                        setSelectedStickyColor("red");
+                        setShowColorPalette(false);
+                        if (whiteboardRef.current) {
+                          whiteboardRef.current.addNote(isArabic ? "انتبه للخطأ ❌" : "Correction Note ❌", "red");
+                          awardXp(15, "ملاحظة حمراء", "Red sticky note");
+                        }
+                      }}
+                      className="color-swatch-dot red"
+                      title="Red Note"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Speed Quiz shortcut */}
+              <button
+                onClick={openSpeedQuiz}
+                className="board-tool-action-btn tool-challenge"
+                style={{ background: "#fef9c3", borderColor: "#facc15", color: "#854d0e" }}
+                title="Launch Speed Challenge Lab"
+              >
+                <span>⚡</span>
+                <span>{isArabic ? "تحدي" : "Quiz"}</span>
+              </button>
+
+              {/* Sample Challenge */}
+              <button
+                onClick={handleAddSampleExercise}
+                className="board-tool-action-btn tool-challenge"
+                title="Place a sample challenge for active tutor"
+              >
+                <span>💡</span>
+                <span>{isArabic ? "تمرين فوري" : "Challenge"}</span>
+              </button>
+
+              {/* AI Vision Snapshot Check */}
+              <button
+                onClick={() => handleSend(isArabic ? "قم بفحص كتابتي على السبورة وقدم لي تقييماً وتصحيحاً تفاعلياً." : "Analyze the handwritten work on my whiteboard and provide feedback.")}
+                disabled={isTyping}
+                className="board-tool-action-btn tool-inspect"
+                title="AI Vision Snapshot Check"
+              >
+                <span>🔍</span>
+                <span>{isArabic ? "فحص ذكي" : "AI Vision"}</span>
+              </button>
+
+              {/* Export Board PNG */}
+              <button
+                onClick={handleDownloadBoard}
+                className="board-tool-action-btn"
+                style={{ background: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46" }}
+                title="Export Whiteboard as high-res PNG image"
+              >
+                <span>📸</span>
+                <span>{isArabic ? "تصدير PNG" : "Export"}</span>
+              </button>
+
+              {/* Wipe Board */}
+              <button
+                onClick={handleClearBoard}
+                className="board-tool-action-btn tool-clear"
+                title="Clean Canvas"
+              >
+                <span>🧽</span>
+                <span>{isArabic ? "مسح" : "Wipe"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Whiteboard Canvas */}
+          <div className="magic-canvas-container">
+            <Whiteboard
+              ref={whiteboardRef}
+              socket={socket}
+              onActionReceived={(tool) => {
+                if (tool === "highlightError") {
+                  triggerCelebration(isArabic ? "قام المعلم بتمييز الخطأ وتقديم التصحيح! 💡" : "Tutor highlighted a correction! 💡");
+                  awardXp(25, "تصحيح لغوي دقيق", "Precision grammar correction");
+                  showTeacherPointer(isArabic ? "انتبه للتصحيح الملون على السبورة! ❌✅" : "Check the correction card on board! ❌✅");
+                } else if (tool === "drawBoardText") {
+                  triggerCelebration(isArabic ? "تمت إضافة ملاحظة تعليمية على السبورة! ✨" : "Educational note drawn on board! ✨");
+                  showTeacherPointer(isArabic ? "قام المعلم بكتابة قاعدة جديدة! 📝" : "Tutor wrote a new rule on board! 📝");
+                }
+              }}
+            />
+          </div>
+        </main>
+      </div>
     </div>
   );
 };
 
 export default App;
-

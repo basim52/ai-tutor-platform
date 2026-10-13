@@ -1,0 +1,7 @@
+{
+  "name": "AI Tutor Platform",
+  "description": "Multimodal AI Tutor platform featuring an interactive digital whiteboard powered by tldraw and Google Gemini.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

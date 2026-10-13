@@ -21,7 +21,8 @@ export function useTutorSocket(selectedAgentId: string = 'foundation') {
 
   const connect = useCallback(() => {
     setStatus('connecting');
-    const wsUrl = window.location.protocol === 'https:' ? 'wss://' : 'ws://' + window.location.hostname + ':8080';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     setSocket(ws);
