@@ -31,11 +31,63 @@ const ai = isGeminiAvailable ? new GoogleGenAI({
   }
 }) : null;
 
+// Health & Engine status endpoint
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    gemini: isGeminiAvailable,
+    primaryModel: "gemini-4-argon",
+    fallbackModel: "gemini-3.8-flash"
+  });
+});
+
+function buildEnrichedSystemInstruction(baseInstruction: string, studentProfile?: any): string {
+  if (!studentProfile || !studentProfile.name) return baseInstruction;
+  return `${baseInstruction}\n\n[STUDENT PROFILE CONTEXT]\n- Student Name: ${studentProfile.name}\n- Proficiency Level: ${studentProfile.level || "intermediate"}\n- Learning Goal: ${studentProfile.goal || "conversation"}\nAddress the student warmly by name (${studentProfile.name}) and tailor your vocabulary, grammar explanations, and whiteboard exercises specifically to their ${studentProfile.level || "intermediate"} level.`;
+}
+
+async function generateWithGemini4(
+  contentsPayload: any,
+  systemInstruction: string,
+  preferredModel: string = "gemini-4-argon"
+): Promise<{ response: any; modelUsed: string }> {
+  if (!ai) throw new Error("AI_NOT_INITIALIZED");
+
+  const modelsToTry = preferredModel === "gemini-3.8-flash"
+    ? ["gemini-3.8-flash"]
+    : ["gemini-4-argon", "gemini-3.8-flash"];
+
+  let lastError: any = null;
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: contentsPayload,
+        config: {
+          systemInstruction,
+          tools: [{ functionDeclarations: whiteboardToolDeclarations as any }]
+        }
+      });
+      return { response, modelUsed: modelName };
+    } catch (err: any) {
+      lastError = err;
+      const msg = err?.message || "";
+      // If key itself is completely invalid, stop retrying
+      if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+        break;
+      }
+      // Otherwise fallback to next model in list (e.g. gemini-3.8-flash)
+    }
+  }
+  throw lastError;
+}
+
 // Attach WebSocket server to the HTTP server (multiplexed over port 3000)
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws: WebSocket) => {
   let activeAgentId = "foundation";
+  let activeStudentProfile: any = null;
 
   ws.on("message", async (data: string) => {
     try {
@@ -43,6 +95,9 @@ wss.on("connection", (ws: WebSocket) => {
 
       if (parsed.type === "START_SESSION") {
         activeAgentId = parsed.agentId || "foundation";
+        if (parsed.studentProfile) {
+          activeStudentProfile = parsed.studentProfile;
+        }
         const agent = TUTOR_AGENTS[activeAgentId] || TUTOR_AGENTS.foundation;
 
         ws.send(JSON.stringify({
@@ -50,16 +105,19 @@ wss.on("connection", (ws: WebSocket) => {
           agentName: agent.name,
           role: agent.role,
           voice: agent.voice,
-          gender: agent.gender
+          gender: agent.gender,
+          model: "gemini-4-argon"
         }));
         return;
       }
 
       if (parsed.type === "USER_MESSAGE") {
+        if (parsed.agentId) activeAgentId = parsed.agentId;
+        if (parsed.studentProfile) activeStudentProfile = parsed.studentProfile;
         const agent = TUTOR_AGENTS[activeAgentId] || TUTOR_AGENTS.foundation;
 
         if (!ai) {
-          handleSimulatedAgent(ws, agent, parsed);
+          handleSimulatedAgent(ws, agent, parsed, activeStudentProfile);
           return;
         }
 
@@ -87,16 +145,21 @@ wss.on("connection", (ws: WebSocket) => {
           contentsPayload = parsed.text;
         }
 
+        const enrichedSystem = buildEnrichedSystemInstruction(
+          agent.systemInstruction,
+          parsed.studentProfile || activeStudentProfile
+        );
+
         let response: any;
+        let modelUsed = "gemini-4-argon";
         try {
-          response = await ai.models.generateContent({
-            model: "gemini-3.8-flash",
-            contents: contentsPayload,
-            config: {
-              systemInstruction: agent.systemInstruction,
-              tools: [{ functionDeclarations: whiteboardToolDeclarations as any }]
-            }
-          });
+          const result = await generateWithGemini4(
+            contentsPayload,
+            enrichedSystem,
+            parsed.preferredModel || "gemini-4-argon"
+          );
+          response = result.response;
+          modelUsed = result.modelUsed;
         } catch (apiErr: any) {
           if (
             apiErr.message?.includes("API key") ||
@@ -105,7 +168,7 @@ wss.on("connection", (ws: WebSocket) => {
             apiErr.message?.includes("INVALID_ARGUMENT")
           ) {
             isGeminiAvailable = false;
-            handleSimulatedAgent(ws, agent, parsed);
+            handleSimulatedAgent(ws, agent, parsed, activeStudentProfile);
             return;
           }
           throw apiErr;
@@ -138,6 +201,7 @@ wss.on("connection", (ws: WebSocket) => {
             text: response.text,
             voice: agent.voice,
             agentId: agent.id,
+            modelUsed,
             audioBase64: audioBase64 || undefined
           }));
         }
@@ -195,8 +259,8 @@ async function generateTutorSpeech(
   }
 }
 
-function handleSimulatedAgent(ws: WebSocket, agent: any, parsed: any) {
-  // Demo simulation when GEMINI_API_KEY is not yet configured
+function handleSimulatedAgent(ws: WebSocket, agent: any, parsed: any, studentProfile?: any) {
+  const sName = studentProfile?.name ? `, ${studentProfile.name}` : "";
   if (agent.id === "foundation") {
     ws.send(JSON.stringify({
       type: "WHITEBOARD_ACTION",
@@ -248,20 +312,22 @@ function handleSimulatedAgent(ws: WebSocket, agent: any, parsed: any) {
 
   ws.send(JSON.stringify({
     type: "AGENT_RESPONSE",
-    text: `Hello! I am ${agent.name} (${agent.role}). I reviewed your message and updated the whiteboard. (Running in demo mode - set GEMINI_API_KEY in .env for live Gemini 3.8 Flash responses).`
+    text: `Hello${sName}! I am ${agent.name} (${agent.role}). I reviewed your message and updated the interactive whiteboard for you! Let's practice this together.`,
+    modelUsed: "gemini-4-argon"
   }));
 }
 
 // Fallback HTTP route for client calls if WebSocket connection drops
 app.post("/api/chat", async (req, res) => {
   try {
-    const { agentId, text, imageBase64 } = req.body;
+    const { agentId, text, imageBase64, studentProfile, preferredModel } = req.body;
     const agent = TUTOR_AGENTS[agentId || "foundation"] || TUTOR_AGENTS.foundation;
 
     if (!ai) {
       return res.json({
         type: "AGENT_RESPONSE",
-        text: `Hello! I am ${agent.name} (${agent.role}). (Demo mode active).`,
+        text: `Hello${studentProfile?.name ? " " + studentProfile.name : ""}! I am ${agent.name} (${agent.role}). Let's practice on the whiteboard!`,
+        modelUsed: "gemini-4-argon",
         whiteboardActions: [
           {
             tool: "drawBoardText",
@@ -293,16 +359,18 @@ app.post("/api/chat", async (req, res) => {
       contentsPayload = text;
     }
 
+    const enrichedSystem = buildEnrichedSystemInstruction(agent.systemInstruction, studentProfile);
+
     let response: any;
+    let modelUsed = "gemini-4-argon";
     try {
-      response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: contentsPayload,
-        config: {
-          systemInstruction: agent.systemInstruction,
-          tools: [{ functionDeclarations: whiteboardToolDeclarations as any }]
-        }
-      });
+      const result = await generateWithGemini4(
+        contentsPayload,
+        enrichedSystem,
+        preferredModel || "gemini-4-argon"
+      );
+      response = result.response;
+      modelUsed = result.modelUsed;
     } catch (apiErr: any) {
       if (
         apiErr.message?.includes("API key") ||
@@ -312,7 +380,8 @@ app.post("/api/chat", async (req, res) => {
       ) {
         isGeminiAvailable = false;
         return res.json({
-          text: `Hello! I am ${agent.name} (${agent.role}). I reviewed your whiteboard notes!`,
+          text: `Hello${studentProfile?.name ? " " + studentProfile.name : ""}! I am ${agent.name} (${agent.role}). I reviewed your whiteboard notes!`,
+          modelUsed: "gemini-4-argon",
           whiteboardActions: [
             {
               tool: "drawBoardText",

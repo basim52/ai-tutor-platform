@@ -1,5 +1,6 @@
 import React from "react";
 import { AGENTS, Agent } from "../config/tutorAgents";
+import { Tutor3DAvatar } from "./Tutor3DAvatar";
 
 export interface StudentProfile {
   name: string;
@@ -44,22 +45,41 @@ export const TutorShowcase: React.FC<TutorShowcaseProps> = ({
 
   return (
     <div className="onboarding-tutors-screen">
-      {/* Hero Welcome Card */}
-      <div className="onboarding-hero-card">
-        <div className="onboarding-hero-badge">
-          <span>✨</span>
-          <span>{isArabic ? "بوابة التسجيل واختيار المعلم الذكي" : "Student Registration & Dream Tutors"}</span>
+      {/* Hero Welcome Card + 3D Human Character Preview */}
+      <div className="onboarding-hero-split">
+        <div className="onboarding-hero-card">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+            <div className="onboarding-hero-badge" style={{ marginBottom: 0 }}>
+              <span>✨</span>
+              <span>{isArabic ? "بوابة التسجيل واختيار المعلم الذكي" : "Student Registration & Dream Tutors"}</span>
+            </div>
+            <div className="onboarding-hero-badge" style={{ marginBottom: 0, background: "rgba(16, 185, 129, 0.28)", border: "1px solid rgba(167, 243, 208, 0.5)" }}>
+              <span>⚡</span>
+              <span>{isArabic ? "مدعوم بمحرك Gemini 4 Argon + مجسّمات 3D بشرية" : "Powered by Gemini 4 Argon + 3D Human Avatars"}</span>
+            </div>
+          </div>
+          <h2 className="onboarding-hero-title">
+            {isArabic
+              ? "سجّل بياناتك كطالب، وتفاعل مع مجسّم المعلم ثلاثي الأبعاد قبل دخول السبورة"
+              : "Register your profile, interact with your 3D human mentor, and launch the whiteboard"}
+          </h2>
+          <p className="onboarding-hero-desc">
+            {isArabic
+              ? "يمتلك كل معلم الآن شخصية بشرية ثلاثية الأبعاد (3D Avatar) تتحدث معك بحركة شفاه متزامنة وتتعرف على مستواك عبر جيمناي 4، وترافقك داخل قاعة السبورة التفاعلية!"
+              : "Every tutor now features an interactive 3D human character with real-time lip-sync and Gemini 4 intelligence that accompanies you inside the whiteboard studio!"}
+          </p>
         </div>
-        <h2 className="onboarding-hero-title">
-          {isArabic
-            ? "سجّل بياناتك كطالب، ثم اختر معلماً من الفريق لدخول السبورة التفاعلية"
-            : "Register your profile, choose your mentor, and launch your whiteboard studio"}
-        </h2>
-        <p className="onboarding-hero-desc">
-          {isArabic
-            ? "تم فصل فريق المعلمين في هذه الواجهة المستقلة لتتعرف على نبرة صوت كل معلم وتخصصه براحة تامة، ثم تنطلق مباشرة إلى السبورة التفاعلية بدون أي تشتيت!"
-            : "Explore each teacher's direct voice and specialized pedagogy in this dedicated portal, then launch directly to your focused whiteboard classroom!"}
-        </p>
+
+        {/* Interactive 3D Human Stage Preview for Selected Tutor */}
+        <div className="onboarding-3d-preview-box">
+          <Tutor3DAvatar
+            agentId={selectedAgent}
+            isArabic={isArabic}
+            isSpeaking={playingVoiceAgentId === selectedAgent}
+            mode="showcase"
+            onTriggerVoicePreview={() => previewAgentVoice(selectedAgent)}
+          />
+        </div>
       </div>
 
       {/* Step 1: Student Profile & Learning Goal */}

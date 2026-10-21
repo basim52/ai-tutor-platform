@@ -30,6 +30,7 @@ import {
   cacheAgentAudio
 } from "./data/voices";
 import { TutorShowcase } from "./components/TutorShowcase";
+import { Tutor3DAvatar } from "./components/Tutor3DAvatar";
 import { AGENTS, Agent } from "./config/tutorAgents";
 import "./App.css";
 
@@ -103,6 +104,8 @@ export const App: React.FC = () => {
   });
 
   const [isChatSidebarCollapsed, setIsChatSidebarCollapsed] = useState<boolean>(false);
+  const [avatar3DMode, setAvatar3DMode] = useState<"docked" | "floating" | "hidden">("docked");
+  const [preferredModel, setPreferredModel] = useState<"gemini-4-argon" | "gemini-3.8-flash">("gemini-4-argon");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState<string>("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
@@ -311,11 +314,11 @@ export const App: React.FC = () => {
     }, 4500);
   }, []);
 
-  // Vercel-compatible: no WebSocket server. Check the serverless API health instead.
+  // Check API health & Gemini 4 status
   useEffect(() => {
     let alive = true;
     fetch("/api/health").then((r) => r.json()).then((d) => {
-      if (alive) setIsConnected(Boolean(d?.ok && d?.gemini));
+      if (alive) setIsConnected(Boolean(d?.ok));
     }).catch(() => alive && setIsConnected(false));
     return () => { alive = false; };
   }, []);
@@ -483,7 +486,13 @@ export const App: React.FC = () => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId: selectedAgent, text: textToSend, imageBase64 })
+        body: JSON.stringify({
+          agentId: selectedAgent,
+          text: textToSend,
+          imageBase64,
+          studentProfile,
+          preferredModel
+        })
       });
       const ct = res.headers.get("content-type") || "";
       const data: any = ct.includes("application/json") ? await res.json() : { error: `HTTP ${res.status}` };
@@ -1437,11 +1446,33 @@ export const App: React.FC = () => {
         </div>
 
         <div className="nav-actions-group">
+          <button
+            type="button"
+            onClick={() =>
+              setPreferredModel((prev) =>
+                prev === "gemini-4-argon" ? "gemini-3.8-flash" : "gemini-4-argon"
+              )
+            }
+            className="gemini-engine-pill"
+            title={isArabic ? "تبديل محرك الذكاء الاصطناعي (Gemini 4 Argon / Flash)" : "Switch AI Engine"}
+          >
+            <span>⚡</span>
+            <span>
+              {preferredModel === "gemini-4-argon"
+                ? isArabic
+                  ? "Gemini 4 Argon"
+                  : "Gemini 4 Argon"
+                : isArabic
+                ? "Gemini 3.8 Flash"
+                : "Gemini 3.8 Flash"}
+            </span>
+          </button>
+
           <div className={`status-chip ${isConnected ? "connected" : "disconnected"}`}>
             <span>{isConnected ? "🟢" : "🔴"}</span>
             <span>
               {isConnected
-                ? isArabic ? "المعلم جاهز (صوت بالدور)" : "Tutor ready (turn-based voice)"
+                ? isArabic ? "المعلم جاهز (3D + صوت)" : "Tutor ready (3D + Voice)"
                 : isArabic ? "المعلم غير متاح" : "Tutor offline"}
             </span>
           </div>
@@ -1559,6 +1590,23 @@ export const App: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* 3D Human Tutor Character (Docked inside Sidebar) */}
+          {avatar3DMode === "docked" && (
+            <div className="sidebar-3d-stage-wrapper">
+              <Tutor3DAvatar
+                agentId={selectedAgent}
+                isArabic={isArabic}
+                isSpeaking={isTutorSpeaking || playingVoiceAgentId === selectedAgent}
+                isListening={isListening}
+                isThinking={isTyping}
+                compact={true}
+                mode="docked"
+                onToggleFloating={() => setAvatar3DMode("floating")}
+                onTriggerVoicePreview={() => previewAgentVoice(selectedAgent)}
+              />
+            </div>
+          )}
 
           {/* Track 5: Active Simulation Cue Card Banner */}
           {activeSimulation && activeSimulation.stages[currentStageIndex]?.cueCardPoints && (
@@ -1845,6 +1893,32 @@ export const App: React.FC = () => {
               <span>{isArabic ? "فريق المعلمين" : "Switch Tutor"}</span>
             </button>
             <button
+              onClick={() =>
+                setAvatar3DMode((prev) =>
+                  prev === "floating" ? "docked" : prev === "docked" ? "floating" : "docked"
+                )
+              }
+              className="board-tool-action-btn"
+              style={{
+                background: avatar3DMode === "floating" ? "#dbeafe" : "#f0fdf4",
+                borderColor: avatar3DMode === "floating" ? "#3b82f6" : "#4ade80",
+                color: avatar3DMode === "floating" ? "#1e40af" : "#166534",
+                fontWeight: 800
+              }}
+              title={isArabic ? "انبثاق أو تثبيت الشخصية ثلاثية الأبعاد 3D" : "Toggle 3D Human Tutor Pop-up"}
+            >
+              <span>🧊</span>
+              <span>
+                {avatar3DMode === "floating"
+                  ? isArabic
+                    ? "تثبيت مجسم 3D"
+                    : "Dock 3D"
+                  : isArabic
+                  ? "انبثاق معلم 3D"
+                  : "Pop-out 3D"}
+              </span>
+            </button>
+            <button
               onClick={() => setIsChatSidebarCollapsed(!isChatSidebarCollapsed)}
               className="board-tool-action-btn"
               style={{ background: "#f8fafc", borderColor: "#cbd5e1", color: "#334155" }}
@@ -2025,6 +2099,23 @@ export const App: React.FC = () => {
                 }
               }}
             />
+
+            {/* Floating Pop-up 3D Human Tutor Companion */}
+            {avatar3DMode === "floating" && (
+              <div className="floating-3d-tutor-popup">
+                <Tutor3DAvatar
+                  agentId={selectedAgent}
+                  isArabic={isArabic}
+                  isSpeaking={isTutorSpeaking || playingVoiceAgentId === selectedAgent}
+                  isListening={isListening}
+                  isThinking={isTyping}
+                  compact={true}
+                  mode="floating"
+                  onToggleFloating={() => setAvatar3DMode("docked")}
+                  onTriggerVoicePreview={() => previewAgentVoice(selectedAgent)}
+                />
+              </div>
+            )}
           </div>
         </main>
       </div>
